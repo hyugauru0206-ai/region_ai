@@ -1,4 +1,4 @@
-﻿:root {
+:root {
   --bg: #1e1f22;
   --bg-2: #17181b;
   --bg-3: #2b2d31;
@@ -6,6 +6,21 @@
   --text: #e6e9ef;
   --muted: #a4a8b3;
   --accent: #66d9c1;
+  --ra-bg-base: #1e1f22;
+  --ra-bg-pane: #17181b;
+  --ra-bg-card: rgba(20, 24, 30, 0.9);
+  --ra-bg-card-strong: rgba(14, 17, 22, 0.94);
+  --ra-fg: #e6e9ef;
+  --ra-fg-muted: #a4a8b3;
+  --ra-border: #3a3d45;
+  --ra-border-strong: #648aa5;
+  --ra-radius-sm: 8px;
+  --ra-radius-md: 10px;
+  --ra-radius-lg: 12px;
+  --ra-space-1: 4px;
+  --ra-space-2: 8px;
+  --ra-space-3: 12px;
+  --ra-shadow-card: 0 8px 22px rgba(0, 0, 0, 0.25);
 }
 
 * {
@@ -27,15 +42,21 @@ button,
 input,
 textarea,
 select {
-  color: var(--text);
+  color: var(--ra-fg);
   background: var(--bg-3);
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-sm);
   max-width: 100%;
 }
 
 button {
   cursor: pointer;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+button:hover {
+  border-color: var(--ra-border-strong);
+  background: #36424f;
 }
 
 .app-root {
@@ -79,6 +100,11 @@ button {
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
+  border: 1px solid rgba(103, 124, 149, 0.35);
+  border-radius: var(--ra-radius-md);
+  padding: var(--ra-space-2);
+  background: linear-gradient(160deg, rgba(28, 34, 43, 0.72), rgba(16, 19, 24, 0.86));
+  margin-bottom: 10px;
 }
 
 .brand {
@@ -346,9 +372,9 @@ button {
 }
 
 .character-sheet-panel {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 8px;
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-md);
+  padding: var(--ra-space-2);
   margin-bottom: 10px;
   background: linear-gradient(160deg, rgba(58, 73, 90, 0.45), rgba(22, 27, 34, 0.92));
 }
@@ -358,12 +384,22 @@ button {
   gap: 8px;
 }
 
+.character-sheet-group {
+  display: grid;
+  gap: 8px;
+}
+
+.character-sheet-group.sheet-top {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
 .character-sheet-card {
   border: 1px solid rgba(114, 132, 154, 0.4);
-  border-radius: 8px;
-  padding: 8px;
-  background: rgba(14, 16, 20, 0.58);
+  border-radius: var(--ra-radius-sm);
+  padding: var(--ra-space-2);
+  background: var(--ra-bg-card-strong);
   min-width: 0;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.03);
 }
 
 .character-sheet-header {
@@ -394,21 +430,62 @@ button {
 .jsonOutput,
 .md-box {
   margin: 0;
-  white-space: pre;
+  white-space: pre-wrap;
   overflow: auto;
   padding: 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: rgba(0, 0, 0, 0.18);
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-sm);
+  background: rgba(0, 0, 0, 0.22);
   max-height: 45vh;
   max-width: 100%;
-  font-family: Consolas, "Courier New", monospace;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Courier New", monospace;
   font-size: 12px;
 }
 
 .wrapAnywhere {
   overflow-wrap: anywhere;
   word-break: break-word;
+}
+
+.raPanel {
+  padding: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.raMonoBox {
+  display: block;
+  margin: 0;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.16);
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.raWrapAnywhere {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.raKvRow {
+  display: grid;
+  grid-template-columns: minmax(86px, auto) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
+  min-width: 0;
+}
+
+.raKvKey {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.raKvVal {
+  min-width: 0;
 }
 
 .row {
@@ -457,6 +534,17 @@ button {
   padding: 12px;
 }
 
+.dashboardTitle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboardTitle small {
+  color: var(--ra-fg-muted);
+  font-weight: 500;
+}
+
 .dashboardMeta {
   display: flex;
   flex-wrap: wrap;
@@ -492,17 +580,24 @@ button {
 }
 
 .dashboard-card {
-  border: 1px solid var(--line);
-  border-radius: 10px;
-  padding: 10px;
-  background: linear-gradient(155deg, rgba(33, 39, 48, 0.75), rgba(20, 24, 30, 0.9));
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-md);
+  padding: var(--ra-space-3);
+  background: linear-gradient(155deg, rgba(33, 39, 48, 0.75), var(--ra-bg-card));
+  box-shadow: var(--ra-shadow-card);
 }
 
 .dashboardQuickActionItem {
-  border: 1px solid var(--line);
-  border-radius: 8px;
+  border: 1px solid var(--ra-border);
+  border-radius: var(--ra-radius-sm);
   padding: 8px;
   min-width: 0;
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.opsCard {
+  border-color: rgba(124, 186, 255, 0.45);
+  background: linear-gradient(155deg, rgba(25, 36, 48, 0.84), rgba(15, 21, 28, 0.92));
 }
 
 .dashboardQuickActionItem.focusedAction {
@@ -589,7 +684,9 @@ button {
   font-size: 11px;
   border-radius: 999px;
   padding: 2px 8px;
-  border: 1px solid var(--line);
+  border: 1px solid var(--ra-border);
+  font-weight: 600;
+  letter-spacing: 0.02em;
 }
 
 .dashboard-badge.status-ok {
@@ -676,11 +773,11 @@ button {
 
 .workspace-seat {
   position: relative;
-  border: 1px solid var(--line);
+  border: 1px solid var(--ra-border);
   border-radius: 16px;
   padding: 12px;
   background: linear-gradient(160deg, rgba(31, 36, 44, 0.95), rgba(19, 21, 26, 0.95));
-  box-shadow: 0 8px 22px rgba(0, 0, 0, 0.25);
+  box-shadow: var(--ra-shadow-card);
   width: min(360px, 42%);
   max-width: 360px;
   min-width: 240px;
@@ -716,6 +813,12 @@ button {
   margin-top: 6px;
   font-size: 12px;
   color: var(--muted);
+}
+
+.workspace-office-line {
+  margin-top: 5px;
+  font-size: 11px;
+  color: #b8c5d3;
 }
 
 .workspace-zone-label {

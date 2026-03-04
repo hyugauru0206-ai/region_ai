@@ -332,6 +332,10 @@ For Task/Result field-level detail, see `docs/spec_task_result.md`.
     - sheet live activity is actor-filtered (`actor_id == selected_agent_id`), deduped by event id, capped to latest 10.
     - sheet stream is active only while sheet is open; fallback polling interval is 5s.
     - sheet memory snapshot uses existing memory APIs only (`/api/memory/:agent_id/:category?limit=...`) with no new backend endpoint.
+  - UI Polish v1 policy (Star Office + Agent HQ inspirations):
+    - scope is UI-only; backend API contracts stay unchanged.
+    - Discord-like navigation and existing routes are preserved (`chat`, `workspace`, `dashboard`, `inbox thread`, `character-sheet`).
+    - right-pane/dashboard/workspace apply unified card/badge/mono-wrap styling to improve readability under long IDs/snippets/JSON.
 - Council autopilot runtime state:
   - `workspace/ui/council/runs/<run_id>.json` (status snapshot)
   - `workspace/ui/council/logs/<run_id>.jsonl` (step log stream)

@@ -9,10 +9,10 @@
 - evidence paths
 
 ## Now
-- Before: agent operators jump between multiple channels to assess one agent. After: one click from seat/member opens a consolidated Character Sheet side panel with links back to existing edit/memory/preset/inbox views.
+- Before: dashboard/workspace/right-pane have mixed card/badge/overflow patterns and operational cards are harder to scan under long text. After: a shared token/card/badge/mono/wrap system keeps layout stable and improves command-center readability while preserving all current routes.
 
 ## DoD
-- Before: no dedicated status panel and no scoped live feed per agent. After: panel exists, uses existing APIs only, loads SSE/polling only while visible, and passes docs/design/ui/desktop/ci smoke gates.
+- Before: Character Sheet exists but presentation and action prominence are inconsistent with workspace/dashboard context. After: Character Sheet remains and is reorganized as status screen (header/profile/memory/activity/ops cards), workspace seat cards expose status-to-action cues, and dashboard ops/tracker cards use unified status styling.
 
 ## Next
 - Expand schema coverage gradually without breaking existing templates.
@@ -21,7 +21,7 @@
 
 ## Decisions
 - Decisions tracked in active design docs under `docs/design/`.
-- Active design: docs/design/design_20260304_character_sheet_v1.md
+- Active design: docs/design/design_20260304_ui_polish_staroffice_claw_v1.md
 
 ## Role Lanes
 - Reviewer:
@@ -31,8 +31,8 @@
 - Researcher:
   - Reviewed `design_20260223_schema_validation` (noted).
 
-- last_design_id: design_20260304_character_sheet_v1
-- last_updated: 2026-03-04T19:13:42.2527530+09:00
+- last_design_id: design_20260304_ui_polish_staroffice_claw_v1
+- last_updated: 2026-03-04T22:40:44.7484683+09:00
 
 
 
@@ -324,4 +324,7 @@
 
 
 - Design link: docs/design/design_20260304_character_sheet_v1.md
+
+
+- Design link: docs/design/design_20260304_ui_polish_staroffice_claw_v1.md
 

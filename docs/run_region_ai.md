@@ -20,7 +20,8 @@
 9. Implement only after `gate_passed`.
 
 ## Commands (Standard vs Dev)
-- Standard path (gate required): `npm.cmd run ci:smoke:gate:json`
+- Standard path (gate required): `npm.cmd run ci:smoke:gate:json` (preferred wrapper)
+- Fallback direct call: `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ci_smoke_gate.ps1 -Json`
 - Standard JSON expectation: `gate_required=true, gate_passed=true, whiteboard_passed=true, ui_passed=true`
 - Dev escape hatch (explicit): `cd apps/orchestrator && npm.cmd run e2e:auto:dev:json`
 - Dev JSON expectation: `gate_phase="skipped", gate_required=false, gate_passed=null`
@@ -105,6 +106,10 @@
     - shows selected agent header/status/thread + traits summary + memory snapshot (episodes, optional knowledge/procedures) + live activity (last 10, actor-filtered)
     - live activity subscription policy: active only while sheet is open; on stream failure fallback is `/api/activity` polling every 5s
     - ops shortcuts: `Heartbeat (dry-run)`, `Run now`, and `Open #inbox thread` (only when agent `thread_key` exists)
+  - UI Polish v1 (Star Office + Agent HQ inspirations, UI-only):
+    - Discord-like IA is preserved; chat and existing channels remain primary surfaces.
+    - visual unification: shared tokens/cards/badges/mono-wrap rules across dashboard, right pane, and character-sheet.
+    - one-click routes are preserved and emphasized: workspace seat -> Character Sheet, members list -> Character Sheet, sheet -> thread/inbox/memory.
 - UI hub API (additive):
   - `GET /api/org/agents`
   - `POST /api/org/agents`
@@ -586,3 +591,4 @@
     - `Select-String -Path <dashboard> -SimpleMatch <task_id> | Select-Object -First 3`
   - Example snippet format:
     - `<dashboard_path>:<line_number>: [NG] <task_id> ... schema_errors_len=<N>`
+

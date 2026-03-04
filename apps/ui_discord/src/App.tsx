@@ -4859,7 +4859,7 @@ export function App(): JSX.Element {
         {activeChannel === "dashboard" && (
           <div className="dashboard-root">
             <div className="row-head">
-              <strong>Daily Loop Dashboard</strong>
+              <strong className="dashboardTitle">🛰 Daily Loop Dashboard <small>Agent HQ</small></strong>
               <div className="composer-actions">
                 <button type="button" onClick={() => void refreshDailyLoopDashboard()}>Refresh</button>
                 <button type="button" onClick={() => { void refreshOpsQuickActionsStatus(); void refreshOpsAutoStabilize(); }}>Refresh ops</button>
@@ -5086,9 +5086,9 @@ export function App(): JSX.Element {
                   <button type="button" onClick={() => setActiveChannel("settings")}>Open settings</button>
                 </div>
               </article>
-              <article className="dashboard-card" ref={dashboardQuickActionsCardRef}>
+              <article className="dashboard-card opsCard" ref={dashboardQuickActionsCardRef}>
                 <div className="row-head">
-                  <strong>Quick Actions</strong>
+                  <strong>🧭 Quick Actions</strong>
                   <span className="dashboard-badge status-warn">DRY-RUN</span>
                   <label className="trackerAutocloseToggle">
                     <input
@@ -5171,9 +5171,9 @@ export function App(): JSX.Element {
                   {!dailyLoopDashboard?.inbox?.items?.length ? <div className="empty">No inbox items</div> : null}
                 </div>
               </article>
-              <article className="dashboard-card">
+              <article className="dashboard-card opsCard">
                 <div className="row-head">
-                  <strong>Ops Quick Actions</strong>
+                  <strong>🛠 Ops Quick Actions</strong>
                   <span className="dashboard-badge status-warn">OPS</span>
                 </div>
                 <div className="empty wrapAnywhere">confirm_token: {opsQuickStatus?.confirm_token ? `${String(opsQuickStatus.confirm_token).slice(0, 24)}...` : "-"}</div>
@@ -5277,9 +5277,9 @@ export function App(): JSX.Element {
               </>
             ) : null}
             {activeExecutionTracker ? (
-              <article className="dashboard-card trackerPanel">
+              <article className="dashboard-card trackerPanel opsCard">
                 <div className="row-head">
-                  <strong>Execution Tracker</strong>
+                  <strong>📡 Execution Tracker</strong>
                   <span className={`dashboard-badge ${`status-${activeExecutionTracker.status === "success" ? "ok" : (activeExecutionTracker.status === "polling" ? "warn" : "err")}`}`}>
                     {activeExecutionTracker.status.toUpperCase()}
                   </span>
@@ -5326,9 +5326,9 @@ export function App(): JSX.Element {
                 )}
               </article>
             ) : null}
-            <article className="dashboard-card trackerHistoryPanel">
+            <article className="dashboard-card trackerHistoryPanel opsCard">
                 <div className="row-head">
-                  <strong>Tracker History</strong>
+                  <strong>🗂 Tracker History</strong>
                   <div className="trackerHistoryToolbar">
                     <span className="dashboard-badge status-warn">LATEST 10</span>
                     <button type="button" onClick={() => showTrackerHistoryExportInPane()}>Export</button>
@@ -5553,6 +5553,8 @@ export function App(): JSX.Element {
                     <div className="workspace-zone-label">{stateZoneLabel(agent.status)}</div>
                     <div className="workspace-agent-role">{agent.role}</div>
                     <div className="workspace-agent-thread">thread: {agent.assigned_thread_id || "-"}</div>
+                    <div className="workspace-office-line">state route: {agent.status} → {stateZoneLabel(agent.status)}</div>
+                    <div className="workspace-office-line">office desk: {agent.assigned_thread_id ? `thread/${agent.assigned_thread_id}` : "unassigned"}</div>
                     <div className="workspace-actions" onPointerDown={(e) => e.stopPropagation()}>
                       <button type="button" onClick={() => openCharacterSheet(agent.id)}>ステータス</button>
                       <button type="button" onClick={() => focusDesktopRole(agent)}>ChatGPTへフォーカス</button>
@@ -6505,7 +6507,7 @@ export function App(): JSX.Element {
 
       <aside className="pane pane-right">
         <div className="section-title">Context</div>
-        <section className="character-sheet-panel">
+        <section className="character-sheet-panel raPanel">
           <div className="row-head">
             <strong>キャラシート</strong>
             <div className="composer-actions">
@@ -6517,17 +6519,31 @@ export function App(): JSX.Element {
           </div>
           {selectedCharacterSheetAgent ? (
             <div className="character-sheet-body">
+              <div className="character-sheet-group sheet-top">
               <div className="character-sheet-card">
                 <div className="character-sheet-header">
                   <div className="character-sheet-title">{selectedCharacterSheetAgent.icon} {selectedCharacterSheetAgent.display_name}</div>
                   <span className={`workspace-status-badge status-${selectedCharacterSheetAgent.status}`}>{selectedCharacterSheetAgent.status}</span>
                 </div>
-                <div className="empty">role: {selectedCharacterSheetAgent.role}</div>
-                <div className="empty wrapAnywhere">thread: <code>{selectedCharacterSheetAgent.assigned_thread_id || "-"}</code></div>
-                <div className="empty wrapAnywhere">agent_id: <code>{selectedCharacterSheetAgent.id}</code></div>
+                <div className="raKvRow">
+                  <span className="raKvKey">role</span>
+                  <span className="raKvVal raWrapAnywhere">{selectedCharacterSheetAgent.role}</span>
+                </div>
+                <div className="raKvRow">
+                  <span className="raKvKey">thread</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.assigned_thread_id || "-"}</code>
+                </div>
+                <div className="raKvRow">
+                  <span className="raKvKey">agent_id</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.id}</code>
+                </div>
                 <div className="composer-actions">
                   {selectedCharacterSheetAgent.assigned_thread_id ? (
                     <button type="button" onClick={() => jumpToThread(String(selectedCharacterSheetAgent.assigned_thread_id || ""))}>Go to thread</button>
+                  ) : null}
+                  <button type="button" onClick={() => openAgentMemory(selectedCharacterSheetAgent.id, "episodes")}>Open Memory</button>
+                  {selectedCharacterSheetAgent.thread_key ? (
+                    <button type="button" onClick={() => openCharacterSheetInboxThread(selectedCharacterSheetAgent)}>Go to #inbox thread</button>
                   ) : null}
                   <button type="button" onClick={() => void navigator.clipboard.writeText(selectedCharacterSheetAgent.id)}>Copy agent_id</button>
                 </div>
@@ -6544,21 +6560,32 @@ export function App(): JSX.Element {
                     ...(selectedCharacterSheetAgent.identity?.strengths || []).map((v) => `Strength: ${v}`),
                     ...(selectedCharacterSheetAgent.identity?.weaknesses || []).map((v) => `Weakness: ${v}`),
                   ].filter((x) => !!String(x || "").trim()).slice(0, 6).map((row, idx) => (
-                    <li key={`trait_${idx}`} className="wrapAnywhere">{String(row || "")}</li>
+                    <li key={`trait_${idx}`} className="raWrapAnywhere">{String(row || "")}</li>
                   ))}
                 </ul>
                 {!(selectedCharacterSheetAgent.identity?.tagline || (selectedCharacterSheetAgent.identity?.values || []).length || (selectedCharacterSheetAgent.identity?.strengths || []).length || (selectedCharacterSheetAgent.identity?.weaknesses || []).length) ? (
                   <div className="empty">No identity traits yet</div>
                 ) : null}
-                <div className="empty wrapAnywhere">Active Profile: <code>{selectedCharacterSheetAgent.active_preset_set_id || activeProfileState?.preset_set_id || "-"}</code></div>
-                <div className="empty wrapAnywhere">Recommended: <code>{selectedCharacterSheetAgent.recommended_preset_set_id || "-"}</code></div>
-                <div className="empty wrapAnywhere">Target: <code>{selectedCharacterSheetAgent.target_preset_set_id || "-"}</code></div>
+                <div className="raKvRow">
+                  <span className="raKvKey">Active Profile</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.active_preset_set_id || activeProfileState?.preset_set_id || "-"}</code>
+                </div>
+                <div className="raKvRow">
+                  <span className="raKvKey">Recommended</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.recommended_preset_set_id || "-"}</code>
+                </div>
+                <div className="raKvRow">
+                  <span className="raKvKey">Target</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.target_preset_set_id || "-"}</code>
+                </div>
                 <div className="composer-actions">
                   <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId(selectedCharacterSheetAgent.id); }}>Open #members edit</button>
                   <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId(selectedCharacterSheetAgent.id); }}>Apply preset</button>
                 </div>
               </div>
+              </div>
 
+              <div className="character-sheet-group sheet-mid">
               <div className="character-sheet-card">
                 <div className="row-head"><strong>Memory snapshot</strong></div>
                 <label><input type="checkbox" checked={characterSheetIncludeDerivedMemory} onChange={(e) => setCharacterSheetIncludeDerivedMemory(e.target.checked)} /> include knowledge/procedures</label>
@@ -6571,7 +6598,7 @@ export function App(): JSX.Element {
                     <div key={`sheet_mem_${item.category}_${item.id}`} className="memory-item">
                       <div className="wrapAnywhere"><strong>{item.title}</strong></div>
                       <small>{formatTs(item.ts)} | {item.category}</small>
-                      <div className="memory-snippet wrapAnywhere">{String(item.body || "").slice(0, 300)}</div>
+                      <div className="memory-snippet raMonoBox raWrapAnywhere">{String(item.body || "").slice(0, 300)}</div>
                     </div>
                   ))}
                   {!characterSheetMemoryItems.length ? <div className="empty">No memory entries</div> : null}
@@ -6588,13 +6615,15 @@ export function App(): JSX.Element {
                     <div key={`sheet_activity_${item.id}`} className="memory-item">
                       <div className="wrapAnywhere"><strong>{item.title}</strong></div>
                       <small>{formatTs(item.ts)} | {item.event_type}</small>
-                      <div className="memory-snippet wrapAnywhere">{String(item.summary || "").slice(0, 220)}</div>
+                      <div className="memory-snippet raMonoBox raWrapAnywhere">{String(item.summary || "").slice(0, 220)}</div>
                     </div>
                   ))}
                   {!characterSheetLiveActivity.length ? <div className="empty">No live activity for this agent yet</div> : null}
                 </div>
               </div>
+              </div>
 
+              <div className="character-sheet-group sheet-bottom">
               <div className="character-sheet-card">
                 <div className="row-head"><strong>Ops shortcuts</strong></div>
                 <div className="composer-actions">
@@ -6604,7 +6633,8 @@ export function App(): JSX.Element {
                     <button type="button" onClick={() => openCharacterSheetInboxThread(selectedCharacterSheetAgent)}>Open #inbox thread</button>
                   ) : null}
                 </div>
-                {heartbeatResult ? <pre className="jsonOutput">{JSON.stringify(heartbeatResult, null, 2)}</pre> : null}
+                {heartbeatResult ? <pre className="jsonOutput raMonoBox raWrapAnywhere">{JSON.stringify(heartbeatResult, null, 2)}</pre> : null}
+              </div>
               </div>
             </div>
           ) : (

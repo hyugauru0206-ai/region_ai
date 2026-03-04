@@ -1,0 +1,53 @@
+{
+    "action":  "contract_index",
+    "last_design_id":  "design_20260304_character_sheet_v1",
+    "updated_at":  "2026-03-04",
+    "schema_path":  "schemas/task.schema.json",
+    "task_kinds":  [
+                       "apply_patch",
+                       "archive_zip",
+                       "create_file",
+                       "file_write",
+                       "patch_apply",
+                       "pipeline",
+                       "run_command"
+                   ],
+    "acceptance_keys":  [
+                            "artifact_exists",
+                            "artifact_file_contains",
+                            "artifact_file_not_contains",
+                            "artifact_file_not_regex",
+                            "artifact_file_regex",
+                            "artifact_json_pointer_equals",
+                            "artifact_json_pointer_exists",
+                            "artifact_json_pointer_gt",
+                            "artifact_json_pointer_gte",
+                            "artifact_json_pointer_lt",
+                            "artifact_json_pointer_lte",
+                            "artifact_json_pointer_not_exists",
+                            "artifact_json_pointer_regex",
+                            "artifact_zip_entry_exists",
+                            "artifact_zip_entry_not_exists",
+                            "artifact_zip_entry_not_regex",
+                            "artifact_zip_entry_regex",
+                            "command_exit_code",
+                            "file_exists",
+                            "stderr_contains",
+                            "stderr_not_contains",
+                            "stdout_contains",
+                            "stdout_not_contains",
+                            "stdout_regex"
+                        ],
+    "artifact_keys":  [
+                          "mirror_run_meta",
+                          "mirror_run_meta_include"
+                      ],
+    "notes":  {
+                  "acceptance_regex_flags_allowed":  [
+                                                         "i",
+                                                         "m",
+                                                         "s",
+                                                         "u"
+                                                     ]
+              }
+}

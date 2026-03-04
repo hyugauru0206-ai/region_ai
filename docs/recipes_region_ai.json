@@ -1,0 +1,115 @@
+{
+    "action":  "recipes_catalog",
+    "last_design_id":  "design_20260304_character_sheet_v1",
+    "updated_at":  "2026-03-04",
+    "root":  "templates/tasks/recipes",
+    "recipes":  [
+                    {
+                        "id":  "evidence_export_bundle",
+                        "file":  "recipe_evidence_export_bundle.yaml",
+                        "title":  "Evidence export bundle",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "archive_zip",
+                                     "artifact_zip_entry",
+                                     "artifact_json_pointer",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_evidence_export_bundle.yaml"
+                    },
+                    {
+                        "id":  "generate_validate_json",
+                        "file":  "recipe_generate_validate_json.yaml",
+                        "title":  "Generate and validate JSON",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "artifact_json_pointer",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_generate_validate_json.yaml"
+                    },
+                    {
+                        "id":  "morning_brief_bundle",
+                        "file":  "recipe_morning_brief_bundle.yaml",
+                        "title":  "Morning brief bundle",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "archive_zip",
+                                     "artifact_zip_entry",
+                                     "artifact_json_pointer",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_morning_brief_bundle.yaml"
+                    },
+                    {
+                        "id":  "ops_snapshot",
+                        "file":  "recipe_ops_snapshot.yaml",
+                        "title":  "Ops snapshot",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "artifact_file_contains",
+                                     "artifact_file_regex",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_ops_snapshot.yaml"
+                    },
+                    {
+                        "id":  "patch_apply_end_to_end",
+                        "file":  "recipe_patch_apply_end_to_end.yaml",
+                        "title":  "Patch apply end-to-end",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "patch_apply",
+                                     "run_command",
+                                     "artifact_json_pointer",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_patch_apply_end_to_end.yaml"
+                    },
+                    {
+                        "id":  "pipeline_failure_triage",
+                        "file":  "recipe_pipeline_failure_triage.yaml",
+                        "title":  "Pipeline failure triage",
+                        "expect":  "expected_ng",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "patch_apply",
+                                     "err_exec",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready failure sample"
+                    },
+                    {
+                        "id":  "release_bundle",
+                        "file":  "recipe_release_bundle.yaml",
+                        "title":  "Release bundle",
+                        "expect":  "success",
+                        "uses":  [
+                                     "pipeline",
+                                     "file_write",
+                                     "archive_zip",
+                                     "artifact_zip_entry",
+                                     "artifact_json_pointer",
+                                     "run_meta"
+                                 ],
+                        "notes":  "copy-ready; E2E guard exists",
+                        "e2e_guard":  "task_e2e_recipe_release_bundle.yaml"
+                    }
+                ]
+}

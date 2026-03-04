@@ -1,0 +1,22 @@
+﻿# Prompt Pack: design_20260228_morning_brief_v1 (External Claude)
+
+## Design summary
+- Design: design_20260228_morning_brief_v1
+- Scope: Morning Brief v1: daily brief pipeline (safe auto) with artifact + inbox
+- Source: C:\work\region_ai\docs\design\design_20260228_morning_brief_v1.md
+
+## What to review
+- Independent design critique
+- Risk and threat-model blind spots
+- Alternative approaches with tradeoffs
+
+## Reply template
+- verdict: approved | noted
+- key_findings:
+  - <bullet>
+- risks:
+  - <bullet>
+- alternatives:
+  - <bullet>
+- missing_tests:
+  - <bullet>

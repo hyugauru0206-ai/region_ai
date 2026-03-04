@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Fake Chat Harness</title>
+    <style>
+      :root {
+        color-scheme: dark;
+      }
+      body {
+        margin: 0;
+        font-family: "Segoe UI", sans-serif;
+        background: #121418;
+        color: #e7ebf2;
+      }
+      .wrap {
+        padding: 16px;
+        display: grid;
+        gap: 12px;
+      }
+      textarea {
+        width: 100%;
+        min-height: 120px;
+        resize: vertical;
+        background: #1d2129;
+        color: #e7ebf2;
+        border: 1px solid #38404c;
+        border-radius: 8px;
+        padding: 10px;
+      }
+      button {
+        width: 120px;
+        background: #2f4860;
+        color: #e7ebf2;
+        border: 1px solid #48627b;
+        border-radius: 8px;
+        padding: 8px 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+      }
+      .panel {
+        background: #171b22;
+        border: 1px solid #333b48;
+        border-radius: 8px;
+        padding: 10px;
+      }
+      .sent-item {
+        border-top: 1px solid #2c3340;
+        padding-top: 8px;
+        margin-top: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      .assistant-msg {
+        border-top: 1px solid #2f3f33;
+        padding-top: 8px;
+        margin-top: 8px;
+        white-space: pre-wrap;
+        word-break: break-word;
+        color: #9ee2ad;
+      }
+      .selectable {
+        user-select: text;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="wrap">
+      <h3>Fake Chat Harness</h3>
+      <textarea id="composer" placeholder="type here"></textarea>
+      <div class="row">
+        <button id="sendBtn" type="button">Send</button>
+        <button id="seedSelBtn" type="button">Seed Selection</button>
+      </div>
+      <div class="panel selectable" id="selectionArea">
+        Selection target text. Highlight this sentence for capture test.
+      </div>
+      <div class="panel" id="sentLog">
+        <strong>Sent log</strong>
+      </div>
+      <div class="panel" id="assistantLog">
+        <strong>Assistant log</strong>
+      </div>
+    </div>
+    <script>
+      const composer = document.getElementById("composer");
+      const sentLog = document.getElementById("sentLog");
+      const assistantLog = document.getElementById("assistantLog");
+      const selectionArea = document.getElementById("selectionArea");
+      document.getElementById("sendBtn").addEventListener("click", () => {
+        const text = composer.value || "";
+        const item = document.createElement("div");
+        item.className = "sent-item selectable";
+        item.textContent = text;
+        sentLog.appendChild(item);
+        const reply = document.createElement("div");
+        reply.className = "assistant-msg selectable";
+        reply.setAttribute("data-role", "assistant");
+        reply.textContent = "ACK: " + text;
+        assistantLog.appendChild(reply);
+      });
+      document.getElementById("seedSelBtn").addEventListener("click", () => {
+        selectionArea.textContent = "Desktop smoke seeded selection text for capture.";
+        const range = document.createRange();
+        range.selectNodeContents(selectionArea);
+        const sel = window.getSelection();
+        sel.removeAllRanges();
+        sel.addRange(range);
+      });
+    </script>
+  </body>
+  </html>

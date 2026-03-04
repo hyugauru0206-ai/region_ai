@@ -1,0 +1,75 @@
+# recipe:
+#   id: evidence_export_bundle
+#   title: "Evidence export bundle"
+#   expect: success
+#   uses: [pipeline, file_write, archive_zip, artifact_zip_entry, artifact_json_pointer, run_meta]
+#   notes: "copy-ready; E2E guard exists"
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: recipe_evidence_export_bundle
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "Recipe: evidence export bundle"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 120000
+steps:
+  - id: step1_seed_evidence_file
+    task:
+      kind: file_write
+      files:
+        - path: "generated/evidence_seed.txt"
+          text: "evidence_seed\n"
+          mode: overwrite
+  - id: step2_archive_evidence_zip
+    task:
+      kind: archive_zip
+      inputs:
+        - "ui/chat/threads.json"
+        - "ui/chat/*.jsonl"
+        - "ui/chat/pins.json"
+        - "ui/chat/unread.json"
+        - "ui/chat/bookmarks.json"
+        - "ui/desktop/desktop_settings.json"
+        - "ui/desktop/notify_state.json"
+        - "ui/desktop/inbox.jsonl"
+        - "ui/desktop/inbox_read_state.json"
+        - "ui/desktop/archive/**"
+        - "ui/taskify/drafts.jsonl"
+        - "ui/taskify/queue_tracking.json"
+        - "runs/*/_meta/**"
+        - "runs/*/result.json"
+        - "runs/*/artifacts.json"
+        - "runs/**/files/written/generated/evidence_seed.txt"
+      output:
+        zip_path: "bundles/evidence_bundle.zip"
+        manifest_path: "bundles/evidence_bundle_manifest.json"
+      options:
+        follow_symlinks: false
+      limits:
+        max_files: 2000
+        max_total_bytes: 52428800
+acceptance:
+  - type: artifact_exists
+    path: "bundles/evidence_bundle.zip"
+  - type: artifact_exists
+    path: "bundles/evidence_bundle_manifest.json"
+  - type: artifact_exists
+    path: "_meta/task.yaml"
+  - type: artifact_exists
+    path: "_meta/result.json"
+  - type: artifact_zip_entry_regex
+    zip_path: "bundles/evidence_bundle.zip"
+    pattern: "runs/.+/files/written/generated/evidence_seed\\.txt"
+  - type: artifact_json_pointer_equals
+    path: "bundles/evidence_bundle_manifest.json"
+    pointer: "/kind"
+    equals: "archive_zip"
+  - type: artifact_json_pointer_gte
+    path: "bundles/evidence_bundle_manifest.json"
+    pointer: "/total_files"
+    value: 1

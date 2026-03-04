@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_accept_artifact_json_pointer_invalid_flags_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: acceptance artifact JSON pointer invalid flags NG"
+  category: implementer
+spec:
+  command: file_write
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  files:
+    - path: "data/sample.json"
+      text: '{"a":{"b":[{"c":"OK"}]}}'
+      mode: overwrite
+  acceptance:
+    - type: artifact_json_pointer_regex
+      path: "written/data/sample.json"
+      pointer: "/a/b/0/c"
+      pattern: "OK"
+      flags: "g"

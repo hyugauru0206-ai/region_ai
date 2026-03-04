@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_run_meta_artifacts_acceptance_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: run meta artifacts acceptance NG"
+  category: implementer
+spec:
+  command: file_write
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  artifact:
+    mirror_run_meta: true
+  files:
+    - path: "generated/meta_ng.txt"
+      text: "hello\n"
+      mode: overwrite
+  acceptance:
+    - type: artifact_exists
+      path: "_meta/result_pre_acceptance.json"
+    - type: artifact_json_pointer_exists
+      path: "_meta/result_pre_acceptance.json"
+      pointer: "/outcome"
+    - type: artifact_file_contains
+      path: "_meta/task.yaml"
+      contains: "mirror_run_meta: true"
+    - type: artifact_file_contains
+      path: "written/generated/meta_ng.txt"
+      contains: "bye"

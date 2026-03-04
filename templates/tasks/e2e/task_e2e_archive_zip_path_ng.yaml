@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_archive_zip_path_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: archive_zip path policy expected NG"
+  category: implementer
+spec:
+  command: archive_zip
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  inputs:
+    - "../evil.txt"
+  output:
+    zip_path: "bundles/output.zip"
+    manifest_path: "bundles/output_manifest.json"
+  options:
+    follow_symlinks: false
+  limits:
+    max_files: 10
+    max_total_bytes: 1024

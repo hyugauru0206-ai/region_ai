@@ -1,0 +1,22 @@
+﻿# Prompt Pack: design_20260224_design_flow_hardening (External Gemini)
+
+## Design summary
+- Design: design_20260224_design_flow_hardening
+- Scope: Force design-first + multi-role discussion + whiteboard applied before implementation.
+- Source: C:\Users\hyuga\region_ai\docs\design\design_20260224_design_flow_hardening.md
+
+## What to review
+- Independent QA-style design review
+- Failure-mode analysis and missing checks
+- Reporting ergonomics and operational readiness
+
+## Reply template
+- verdict: approved | noted
+- key_findings:
+  - <bullet>
+- risks:
+  - <bullet>
+- alternatives:
+  - <bullet>
+- missing_tests:
+  - <bullet>

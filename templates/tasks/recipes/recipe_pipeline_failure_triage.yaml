@@ -1,0 +1,41 @@
+# recipe:
+#   id: pipeline_failure_triage
+#   title: "Pipeline failure triage"
+#   expect: expected_ng
+#   uses: [pipeline, file_write, patch_apply, err_exec, run_meta]
+#   notes: "copy-ready failure sample"
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: recipe_pipeline_failure_triage
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "Recipe: pipeline failure triage sample (ERR_EXEC path)"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 60000
+steps:
+  - id: step1_seed_file
+    task:
+      kind: file_write
+      files:
+        - path: "src/hello.txt"
+          text: |
+            alpha
+            beta
+          mode: overwrite
+  - id: step2_patch_apply_fail
+    task:
+      kind: patch_apply
+      patch:
+        format: unified
+        text: |
+          --- a/src/hello.txt
+          +++ b/src/hello.txt
+          @@ -1,2 +1,2 @@
+          -gamma
+          +delta
+           beta

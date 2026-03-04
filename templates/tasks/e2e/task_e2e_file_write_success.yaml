@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_file_write_success__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: file_write success"
+  category: implementer
+spec:
+  command: file_write
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  files:
+    - path: "generated/hello.txt"
+      text: "hello\n"
+      mode: overwrite
+  acceptance:
+    - type: stdout_contains
+      text: "FILE_WRITE_OK"
+    - type: artifact_exists
+      path: "written/generated/hello.txt"
+    - type: artifact_exists
+      path: "written_manifest.json"

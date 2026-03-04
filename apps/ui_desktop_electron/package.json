@@ -1,0 +1,14 @@
+{
+  "name": "region-ai-ui-desktop-electron",
+  "version": "0.1.0",
+  "private": true,
+  "main": "main.cjs",
+  "scripts": {
+    "desktop:dev": "electron .",
+    "desktop:smoke": "electron . --smoke",
+    "desktop:build": "node -e \"console.log('desktop_build_ok')\""
+  },
+  "devDependencies": {
+    "electron": "^31.7.7"
+  }
+}

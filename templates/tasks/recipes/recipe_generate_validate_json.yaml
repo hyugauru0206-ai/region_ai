@@ -1,0 +1,43 @@
+# recipe:
+#   id: generate_validate_json
+#   title: "Generate and validate JSON"
+#   expect: success
+#   uses: [pipeline, file_write, artifact_json_pointer, run_meta]
+#   notes: "copy-ready; E2E guard exists"
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: recipe_generate_validate_json
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "Recipe: generate and validate JSON with declarative audit"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 60000
+steps:
+  - id: step1_file_write_json
+    task:
+      kind: file_write
+      files:
+        - path: "data/sample.json"
+          text: '{"a":{"b":[{"c":"OK"}]}}'
+          mode: overwrite
+acceptance:
+  - type: artifact_exists
+    path: "written/data/sample.json"
+  - type: artifact_exists
+    path: "written_manifest.json"
+  - type: artifact_exists
+    path: "_meta/task.yaml"
+  - type: artifact_exists
+    path: "_meta/result.json"
+  - type: artifact_json_pointer_equals
+    path: "written/data/sample.json"
+    pointer: "/a/b/0/c"
+    equals: "OK"
+  - type: artifact_json_pointer_exists
+    path: "_meta/result.json"
+    pointer: "/outcome"

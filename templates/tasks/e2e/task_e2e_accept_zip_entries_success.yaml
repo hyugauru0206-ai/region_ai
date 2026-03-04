@@ -1,0 +1,44 @@
+﻿apiVersion: v1
+kind: pipeline
+metadata:
+  id: task_e2e_accept_zip_entries_success__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: acceptance zip entry success"
+  category: implementer
+runtime:
+  timeout_ms: 60000
+steps:
+  - id: step1_seed_files
+    task:
+      kind: file_write
+      files:
+        - path: "generated/a.txt"
+          text: "A\n"
+          mode: overwrite
+        - path: "generated/b.txt"
+          text: "B\n"
+          mode: overwrite
+  - id: step2_archive_zip
+    task:
+      kind: archive_zip
+      inputs:
+        - "generated/**"
+      output:
+        zip_path: "bundles/out.zip"
+        manifest_path: "bundles/out_manifest.json"
+      options:
+        follow_symlinks: false
+      limits:
+        max_files: 200
+        max_total_bytes: 10485760
+acceptance:
+  - type: artifact_exists
+    path: "bundles/out.zip"
+  - type: artifact_zip_entry_exists
+    zip_path: "bundles/out.zip"
+    entry: "generated/a.txt"
+  - type: artifact_zip_entry_exists
+    zip_path: "bundles/out.zip"
+    entry: "generated/b.txt"

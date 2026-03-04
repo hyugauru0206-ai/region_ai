@@ -1,0 +1,86 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://region-ai.local/schemas/result.schema.json",
+  "type": "object",
+  "required": ["apiVersion", "kind", "metadata", "outcome"],
+  "properties": {
+    "apiVersion": { "const": "v1" },
+    "kind": { "const": "Result" },
+    "metadata": {
+      "type": "object",
+      "required": ["id", "task_id", "assignee", "started_at", "finished_at", "status"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "task_id": { "type": "string", "minLength": 1 },
+        "assignee": { "type": "string", "minLength": 1 },
+        "started_at": { "type": "string", "minLength": 1 },
+        "finished_at": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["success", "failed", "skipped"] },
+        "run_id": { "type": "string" }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "required": ["summary", "errors"],
+      "properties": {
+        "summary": { "type": "string" },
+        "artifacts": {
+          "type": "object",
+          "properties": {
+            "stdout_path": { "type": "string" },
+            "stderr_path": { "type": "string" },
+            "diff_path": { "type": "string" },
+            "files": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "metrics": {
+          "type": "object",
+          "properties": {
+            "duration_ms": { "type": "number" }
+          }
+        },
+        "errors": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "code": { "type": "string" },
+              "message": { "type": "string" },
+              "details": {
+                "type": "object",
+                "properties": {
+                  "kind": { "type": "string" },
+                  "target": { "enum": ["stdout", "stderr", ""] },
+                  "expected": {
+                    "anyOf": [
+                      { "type": "string" },
+                      { "type": "number" },
+                      { "type": "boolean" },
+                      { "type": "object" },
+                      { "type": "array" }
+                    ]
+                  },
+                  "actual_sample": { "type": "string" },
+                  "note": { "type": "string" },
+                  "schema_errors": {
+                    "type": "array",
+                    "items": {
+                      "type": "object",
+                      "required": ["instancePath", "schemaPath", "keyword", "message"],
+                      "properties": {
+                        "instancePath": { "type": "string" },
+                        "schemaPath": { "type": "string" },
+                        "keyword": { "type": "string" },
+                        "message": { "type": "string" }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

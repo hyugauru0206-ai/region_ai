@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_ui_api_smoke__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: ui_api smoke"
+  category: implementer
+spec:
+  command: run_command
+  args:
+    mode: command
+    command: >-
+      "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -ExecutionPolicy Bypass -File "tools\ui_smoke.ps1" -Json
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 40000
+    timeout_expected: false
+  acceptance:
+    - type: stdout_contains
+      text: "ui_smoke"
+    - type: stdout_contains
+      text: "\"exit_code\":0"
+    - type: command_exit_code
+      exit_code: 0

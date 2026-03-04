@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: task_e2e_pipeline_invalid_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: pipeline invalid expected NG"
+  category: implementer
+runtime:
+  timeout_ms: 60000
+steps:
+  - id: bad_step
+    task:
+      kind: pipeline

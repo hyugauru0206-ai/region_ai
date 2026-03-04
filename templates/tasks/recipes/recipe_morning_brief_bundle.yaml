@@ -1,0 +1,79 @@
+# recipe:
+#   id: morning_brief_bundle
+#   title: "Morning brief bundle"
+#   expect: success
+#   uses: [pipeline, file_write, archive_zip, artifact_zip_entry, artifact_json_pointer, run_meta]
+#   notes: "copy-ready; E2E guard exists"
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: recipe_morning_brief_bundle
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "Recipe: morning brief bundle"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 120000
+steps:
+  - id: step1_write_brief
+    task:
+      kind: file_write
+      files:
+        - path: "written/morning_brief_19700101.md"
+          text: |
+            # Morning Brief 1970-01-01
+
+            - generated_by=recipe_morning_brief_bundle
+            - date=1970-01-01
+          mode: overwrite
+  - id: step2_write_manifest
+    task:
+      kind: file_write
+      files:
+        - path: "bundles/morning_brief_bundle_manifest_19700101.json"
+          text: |
+            {
+              "kind": "morning_brief_bundle",
+              "date": "1970-01-01",
+              "files": [
+                "written/morning_brief_19700101.md",
+                "bundles/morning_brief_bundle_manifest_19700101.json"
+              ]
+            }
+          mode: overwrite
+  - id: step3_archive_bundle
+    task:
+      kind: archive_zip
+      inputs:
+        - "written/morning_brief_19700101.md"
+        - "bundles/morning_brief_bundle_manifest_19700101.json"
+      output:
+        zip_path: "bundles/morning_brief_bundle_19700101.zip"
+        manifest_path: "bundles/morning_brief_bundle_manifest_19700101.json"
+      options:
+        follow_symlinks: false
+      limits:
+        max_files: 50
+        max_total_bytes: 262144
+acceptance:
+  - type: artifact_exists
+    path: "bundles/morning_brief_bundle_19700101.zip"
+  - type: artifact_exists
+    path: "bundles/morning_brief_bundle_manifest_19700101.json"
+  - type: artifact_zip_entry_exists
+    zip_path: "bundles/morning_brief_bundle_19700101.zip"
+    entry: "written/morning_brief_19700101.md"
+  - type: artifact_zip_entry_exists
+    zip_path: "bundles/morning_brief_bundle_19700101.zip"
+    entry: "bundles/morning_brief_bundle_manifest_19700101.json"
+  - type: artifact_json_pointer_equals
+    path: "written/bundles/morning_brief_bundle_manifest_19700101.json"
+    pointer: "/date"
+    equals: "1970-01-01"
+  - type: artifact_json_pointer_gte
+    path: "written/bundles/morning_brief_bundle_manifest_19700101.json"
+    pointer: "/files/length"
+    value: 2

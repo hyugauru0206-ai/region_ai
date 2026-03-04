@@ -1,0 +1,70 @@
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: task_e2e_recipe_evidence_export_bundle__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: recipe evidence export bundle"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 120000
+steps:
+  - id: step1_seed_evidence_file
+    task:
+      kind: file_write
+      files:
+        - path: "generated/evidence_seed.txt"
+          text: "evidence_seed\n"
+          mode: overwrite
+  - id: step2_archive_evidence_zip
+    task:
+      kind: archive_zip
+      inputs:
+        - "ui/chat/threads.json"
+        - "ui/chat/*.jsonl"
+        - "ui/chat/pins.json"
+        - "ui/chat/unread.json"
+        - "ui/chat/bookmarks.json"
+        - "ui/desktop/desktop_settings.json"
+        - "ui/desktop/notify_state.json"
+        - "ui/desktop/inbox.jsonl"
+        - "ui/desktop/inbox_read_state.json"
+        - "ui/desktop/archive/**"
+        - "ui/taskify/drafts.jsonl"
+        - "ui/taskify/queue_tracking.json"
+        - "runs/*/_meta/**"
+        - "runs/*/result.json"
+        - "runs/*/artifacts.json"
+        - "runs/**/files/written/generated/evidence_seed.txt"
+      output:
+        zip_path: "bundles/evidence_bundle.zip"
+        manifest_path: "bundles/evidence_bundle_manifest.json"
+      options:
+        follow_symlinks: false
+      limits:
+        max_files: 2000
+        max_total_bytes: 52428800
+  - id: step3_best_effort_inbox_notify_probe
+    task:
+      kind: run_command
+      args:
+        command: >-
+          "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "$ws = if ($env:REGION_AI_WORKSPACE) { $env:REGION_AI_WORKSPACE } else { Join-Path $env:LOCALAPPDATA 'region_ai\workspace' }; $p = Join-Path $ws 'ui\desktop\inbox.jsonl'; $hit = $false; if (Test-Path -LiteralPath $p) { try { $hit = Select-String -Path $p -Pattern '\"source\":\"export_evidence_bundle\"' -SimpleMatch -Quiet -ErrorAction Stop } catch { $hit = $false } }; [Console]::WriteLine(('EVIDENCE_EXPORT_INBOX_NOTIFY_PRESENT=' + ([string]$hit).ToLower())); [Console]::Out.Flush(); exit 0"
+acceptance:
+  - type: artifact_exists
+    path: "bundles/evidence_bundle.zip"
+  - type: artifact_exists
+    path: "bundles/evidence_bundle_manifest.json"
+  - type: artifact_json_pointer_equals
+    path: "bundles/evidence_bundle_manifest.json"
+    pointer: "/kind"
+    equals: "archive_zip"
+  - type: artifact_json_pointer_gte
+    path: "bundles/evidence_bundle_manifest.json"
+    pointer: "/total_files"
+    value: 1
+  - type: stdout_contains
+    text: "EVIDENCE_EXPORT_INBOX_NOTIFY_PRESENT="

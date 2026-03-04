@@ -1,0 +1,13 @@
+﻿# Review Request: design_20260225_contract_index_ssot
+
+## Goal Summary
+- Contract index SSOT + drift guard (schema⇄spec)
+
+## Request
+- Reply with bullets.
+- Include risks.
+- Include missing tests.
+## QA Checklist
+- Are DoD checks deterministic and automatable?
+- What flakiness risks remain?
+- Which negative tests are still missing?

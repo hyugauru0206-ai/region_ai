@@ -1,0 +1,373 @@
+# Task / Result Spec (Authoritative)
+
+Platform-level workflow and operational contracts are in `docs/spec_region_ai.md`.
+
+## Task YAML
+- Required:
+  - `apiVersion: v1`
+  - `kind: Task`
+  - `metadata.id` (non-empty string)
+  - `metadata.assignee` (string)
+  - `metadata.created_at` (string)
+  - `metadata.title` (string)
+  - `spec.command` (string)
+  - `spec.args` (object)
+- Optional:
+  - `metadata.role`, `metadata.category`, `metadata.persona`, `metadata.priority`, `metadata.tags`
+  - `spec.context`, `spec.runtime`, `spec.acceptance`, `spec.safety`
+  - `spec.patch` (`patch_apply` only)
+
+## Task Command Kinds
+- `create_file`
+- `apply_patch` (legacy git-apply path)
+- `run_command`
+- `patch_apply` (workspace-scoped unified diff apply)
+- `file_write` (workspace-scoped safe text write + artifact mirror)
+- `archive_zip` (workspace-scoped zip bundling to run artifacts)
+- `pipeline` (top-level sequential multi-step task)
+
+## pipeline Contract
+- Top-level shape:
+  - `kind: pipeline`
+  - `steps` (array, min=1, max=10)
+  - each `steps[].task.kind` is one of: `run_command|patch_apply|create_file|apply_patch|file_write|archive_zip`
+  - nested `pipeline` in step task is forbidden
+- Runtime:
+  - steps execute sequentially (fail-fast)
+  - pipeline `runtime.timeout_ms` is global upper bound
+  - step timeout uses `steps[].task.runtime.timeout_ms` when present; otherwise bounded by remaining pipeline timeout
+- Acceptance:
+  - evaluated against aggregated pipeline stdout/stderr
+- Error contract:
+  - schema/pre-validation invalid (`steps` empty, unknown kind, nesting, invalid payload): `ERR_TASK`
+  - step runtime failure inherits step error code (`ERR_EXEC`, `ERR_TIMEOUT`, etc.)
+  - aggregated acceptance NG: `ERR_ACCEPTANCE`
+- Result details (machine-readable):
+  - `steps_summary[]` with `step_id`, `step_index`, `status`, `error_code`, `run_id`
+  - `failed_step_id`, `failed_step_index` (on failure)
+  - `aggregated_stdout_sample`, `aggregated_stderr_sample`, `note` (truncation info)
+
+## patch_apply Contract
+- Required fields:
+  - `spec.command: patch_apply`
+  - `spec.patch.format: unified`
+  - `spec.patch.text: <unified diff text>`
+- Execution path:
+  - pre-validation in orchestrator (schema + light checks)
+  - executor mode `patch_apply` applies unified diff under workspace root
+  - result is finalized by orchestrator waiting flow
+- Safety constraints:
+  - reject absolute path, UNC path, and `..` traversal in patch targets
+  - target must resolve under workspace root
+  - bounded patch text size and bounded file count/size
+- Error contract:
+  - schema/light/pre-apply invalid input: `ERR_TASK`
+  - syntactically valid but non-applicable patch apply failure (hunk mismatch/target not found/apply conflict): `ERR_EXEC`
+  - acceptance mismatch (if any acceptance is configured): `ERR_ACCEPTANCE`
+- Success signal:
+  - stdout includes `PATCH_APPLIED`
+  - `files` includes applied relative paths when produced under run files dir
+
+## file_write Contract
+- Required fields:
+  - `spec.command: file_write`
+  - `spec.files[]` (min=1, max=20)
+  - each file item:
+    - `path` (workspace-relative only)
+    - `text` (UTF-8 text)
+    - `mode` (`overwrite|append`, default `overwrite`)
+- Safety constraints:
+  - reject absolute path, UNC path, and `..` traversal in `path`
+  - per-file text limit: `<=256KB` (UTF-8 bytes)
+  - total text limit per task: `<=1MB`
+- Error contract:
+  - schema/pre-validation invalid (`files` missing/empty, path violation, mode invalid, limit exceeded): `ERR_TASK`
+  - runtime I/O failure (permission/lock/write failure): `ERR_EXEC`
+  - acceptance mismatch (if configured): `ERR_ACCEPTANCE`
+- Success signal:
+  - stdout includes `FILE_WRITE_OK`
+  - run artifacts contain:
+    - `written/<path>` for each written file
+    - `written_manifest.json` with machine-readable write summary
+- Runtime error details (recommended machine-readable keys):
+  - `reason_key`
+  - `failed_path`
+  - `stderr_sample`
+  - `tool_exit_code`
+  - `note`
+
+## archive_zip Contract
+- Required fields:
+  - `spec.command: archive_zip`
+  - `spec.inputs[]` (workspace-relative patterns)
+  - `spec.output.zip_path`
+  - `spec.output.manifest_path`
+- Optional fields:
+  - `spec.options.follow_symlinks` (default `false`)
+  - `spec.limits.max_files` (default `200`)
+  - `spec.limits.max_total_bytes` (default `10485760`)
+- Safety constraints:
+  - reject absolute/UNC/traversal path in inputs and output paths
+  - resolve matched files only under workspace root
+  - do not follow symlinks by default
+  - output files must be under `runs/<run_id>/files/`
+- Output artifacts:
+  - ZIP: `<zip_path>`
+  - manifest JSON: `<manifest_path>`
+  - manifest keys:
+    - `files[]` (`rel_path`, `size_bytes`)
+    - `total_files`
+    - `total_bytes`
+    - `truncated`
+    - `note`
+- Error contract:
+  - pre-validation invalid path/limits/input config => `ERR_TASK`
+  - runtime resolve/read/zip/manifest write failure and runtime limit exceed => `ERR_EXEC`
+  - acceptance mismatch => `ERR_ACCEPTANCE`
+- Success signal:
+  - stdout contains `ARCHIVE_ZIP_OK`
+
+## Run Meta Artifacts Contract (optional)
+- Task option:
+  - `spec.artifact.mirror_run_meta: true|false` (default `false`)
+  - `spec.artifact.mirror_run_meta_include` (optional enum array):
+    - `task_yaml`
+    - `result_pre_acceptance_json`
+    - `result_final_json`
+- Generated artifact paths (under `runs/<run_id>/files/`):
+  - `_meta/task.yaml`
+  - `_meta/result_pre_acceptance.json`
+  - `_meta/result.json`
+- Behavior:
+  - generated only when `mirror_run_meta=true`
+  - include list omitted => all three files are generated
+  - `result_pre_acceptance.json` is written after executor output is assembled and before acceptance evaluation
+  - `_meta/result.json` is written after acceptance evaluation as the final Result snapshot
+- Error contract:
+  - schema invalid include values => `ERR_TASK`
+  - runtime write failure for `_meta/*` => `ERR_EXEC` (`reason_key=RUN_META_WRITE_FAILED`, `failed_path` included)
+- Size cap:
+  - each meta file is capped to `256KB` equivalent payload with truncation note
+
+## Result YAML
+- Required:
+  - `apiVersion: v1`
+  - `kind: Result`
+  - `metadata.id`, `metadata.task_id`, `metadata.assignee`
+  - `metadata.started_at`, `metadata.finished_at`
+  - `metadata.status` (`success|failed|skipped`)
+  - `outcome.summary`
+  - `outcome.errors` (array; empty allowed)
+- Optional:
+  - `metadata.run_id`
+  - `outcome.artifacts`, `outcome.metrics`
+  - `outcome.errors[].details`
+    - `details.schema_errors[]`:
+      - `instancePath`
+      - `schemaPath`
+      - `keyword`
+      - `message`
+
+## Result Naming
+- Result filename format:
+  - `result_<taskKey>_run_<runId>.yaml`
+- `taskKey` rule:
+  - use `metadata.id` when valid
+  - otherwise fallback to sanitized source file stem + short hash
+  - strip `.yaml/.yml` extension in fallback key
+  - allowed chars: `[A-Za-z0-9_.-]`
+
+## Acceptance Types
+- `stdout_contains`
+  - required: `text` (string)
+- `stdout_regex`
+  - required: `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid `flags` is schema-invalid => `ERR_TASK`
+    - compile failure pattern is runtime acceptance NG => `ERR_ACCEPTANCE`
+    - regex evaluation target text is bounded to first `10000` chars
+    - when bounded, `details.note` includes `input_truncated`
+- `stderr_contains`
+  - required: `value` (string, 1..1024)
+- `stdout_not_contains`
+  - required: `value` (string, 1..1024)
+- `stderr_not_contains`
+  - required: `value` (string, 1..1024)
+- `command_exit_code`
+  - required: `exit_code` (number)
+  - optional: `command`, `timeout_ms`
+- `artifact_exists`
+  - required: `path` (string, relative)
+  - rules:
+    - relative path only
+    - reject absolute path
+    - reject `..` traversal
+    - reject UNC/network absolute style
+    - pass only when both are true:
+      - entry exists in `artifacts.files`
+      - actual file exists under `<workspace>/runs/<run_id>/files/`
+- `artifact_file_contains`
+  - required: `path` (string, relative), `contains` (string, 1..1024)
+  - rules:
+    - path uses artifact-relative resolution under `<workspace>/runs/<run_id>/files/`
+    - reject absolute path / UNC / `..` traversal
+    - reads up to first `256KB`; truncation sets `details.note=input_truncated`
+  - pass: artifact content includes `contains`
+- `artifact_file_not_contains`
+  - required: `path` (string, relative), `not_contains` (string, 1..1024)
+  - rules: same path/read constraints as `artifact_file_contains`
+  - pass: artifact content does not include `not_contains`
+- `artifact_file_regex`
+  - required: `path` (string, relative), `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid `flags` is schema-invalid => `ERR_TASK`
+    - compile failure is runtime acceptance NG => `ERR_ACCEPTANCE`
+    - path/read constraints are identical to `artifact_file_contains`
+- `artifact_file_not_regex`
+  - required: `path` (string, relative), `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid `flags` is schema-invalid => `ERR_TASK`
+    - compile failure is runtime acceptance NG => `ERR_ACCEPTANCE`
+    - path/read constraints are identical to `artifact_file_contains`
+- `artifact_json_pointer_equals`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `equals` (any JSON value)
+  - contract:
+    - invalid path/pointer shape is pre-validation invalid => `ERR_TASK`
+    - JSON parse failure / pointer not found / value mismatch => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_regex`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid flags/path/pointer shape => `ERR_TASK`
+    - JSON parse failure / pointer missing / non-string value / compile failure / regex mismatch => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_exists`
+  - required: `path` (string, relative), `pointer` (JSON Pointer)
+  - contract:
+    - invalid path/pointer shape => `ERR_TASK`
+    - parse failure or pointer missing => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_not_exists`
+  - required: `path` (string, relative), `pointer` (JSON Pointer)
+  - contract:
+    - invalid path/pointer shape => `ERR_TASK`
+    - parse failure or pointer found => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_gt`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `value` (number, finite)
+  - contract:
+    - invalid path/pointer/value shape or non-finite value => `ERR_TASK`
+    - parse failure / pointer missing / non-number / compare mismatch => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_gte`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `value` (number, finite)
+  - contract:
+    - invalid path/pointer/value shape or non-finite value => `ERR_TASK`
+    - parse failure / pointer missing / non-number / compare mismatch => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_lt`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `value` (number, finite)
+  - contract:
+    - invalid path/pointer/value shape or non-finite value => `ERR_TASK`
+    - parse failure / pointer missing / non-number / compare mismatch => `ERR_ACCEPTANCE`
+- `artifact_json_pointer_lte`
+  - required: `path` (string, relative), `pointer` (JSON Pointer), `value` (number, finite)
+  - contract:
+    - invalid path/pointer/value shape or non-finite value => `ERR_TASK`
+    - parse failure / pointer missing / non-number / compare mismatch => `ERR_ACCEPTANCE`
+- `artifact_zip_entry_exists`
+  - required: `zip_path` (string, relative), `entry` (string)
+  - contract:
+    - invalid `zip_path` (absolute/UNC/traversal) => `ERR_TASK`
+    - zip open/list failure => `ERR_ACCEPTANCE`
+    - entry missing => `ERR_ACCEPTANCE`
+- `artifact_zip_entry_not_exists`
+  - required: `zip_path` (string, relative), `entry` (string)
+  - contract:
+    - invalid `zip_path` (absolute/UNC/traversal) => `ERR_TASK`
+    - zip open/list failure => `ERR_ACCEPTANCE`
+    - entry found => `ERR_ACCEPTANCE`
+- `artifact_zip_entry_regex`
+  - required: `zip_path` (string, relative), `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid flags or `zip_path` => `ERR_TASK`
+    - zip open/list failure => `ERR_ACCEPTANCE`
+    - compile failure / regex mismatch => `ERR_ACCEPTANCE`
+- `artifact_zip_entry_not_regex`
+  - required: `zip_path` (string, relative), `pattern` (string, 1..1024)
+  - optional: `flags` (`i|m|s|u`, max 4 chars, no duplicates)
+  - contract:
+    - invalid flags or `zip_path` => `ERR_TASK`
+    - zip open/list failure => `ERR_ACCEPTANCE`
+    - compile failure / regex match => `ERR_ACCEPTANCE`
+  - ZIP listing caps:
+    - maximum scanned entries: `5000`
+    - each entry is clipped to `512` chars
+    - details include capped `entries_sample` and truncation note when applied
+
+## Runtime
+- `runtime.timeout_expected` (boolean)
+- `runtime.timeout_expected_acceptance` (`skip|strict`)
+  - `skip`: timeout-expected task can skip acceptance
+  - `strict`: acceptance must still pass even in timeout-expected scenario
+
+## Error Codes
+- `ERR_TASK`: task spec/schema invalid or task-level execution failure before valid acceptance evaluation
+- `ERR_ACCEPTANCE`: acceptance check failed
+  - recommended details keys:
+    - `kind`
+    - `target` (`stdout|stderr`)
+    - `expected`
+    - `actual_sample` (first 200 chars cap)
+    - `note` (e.g. `regex_compile_error`, `input_truncated`)
+  - artifact file checks details keys:
+    - `target_path`
+    - `check_type` (`contains|not_contains|regex|not_regex`)
+    - `pattern_or_text`
+    - `flags` (regex checks only)
+    - `actual_sample` (bounded sample)
+    - `note` (`missing_path`, `file_missing`, `read_error:*`, `input_truncated`, etc.)
+  - artifact JSON pointer checks details keys:
+    - `target_path`
+    - `check_type` (`artifact_json_pointer_equals|artifact_json_pointer_regex|artifact_json_pointer_exists|artifact_json_pointer_not_exists|json_pointer_gt|json_pointer_gte|json_pointer_lt|json_pointer_lte`)
+    - `pointer`
+    - `expected`
+    - `expected_value` (numeric checks)
+    - `flags` (regex checks only)
+    - `actual_value_type` (`string|number|object|array|null|bool|undefined`)
+    - `actual_value_sample`
+    - `note` (`json_parse_error:*`, `pointer_not_found`, `value_not_string`, `non_number`, `actual_value_truncated`, etc.)
+  - artifact zip entry checks details keys:
+    - `target_zip_path`
+    - `check_type` (`zip_entry_exists|zip_entry_not_exists|zip_entry_regex|zip_entry_not_regex`)
+    - `entry` (exists/not_exists)
+    - `pattern`, `flags` (regex checks)
+    - `compile_error` (regex compile failure)
+    - `entries_sample` (capped with truncation note)
+    - `total_entries` (when available)
+    - `note` (`zip_open_error:*`, `entries_truncated:*`, `entries_sample_truncated`, etc.)
+- `ERR_TIMEOUT`: timeout occurred where timeout is not expected
+- `ERR_EXEC`: executor runtime failure after task contract validation passed
+- `ERR_EXECUTOR`: executor-level failure (reserved/implementation-specific)
+
+## Pre-validation Failure Contract
+- Chosen contract: **Option A**
+  - allocate `run_id`
+  - do **not** create `runs/<run_id>/artifacts.json` (artifacts are not expected)
+  - emit Result with `status=failed`, `errors[0].code=ERR_TASK`
+  - include `errors[0].details.schema_errors` (non-empty on schema validation errors)
+
+## Minimal Examples
+- Success task:
+  - `run_command` + `stdout_contains` + `command_exit_code`
+- Timeout strict_ng:
+  - `timeout_expected: true`
+  - `timeout_expected_acceptance: strict`
+  - acceptance intentionally fails -> `failed` + `ERR_ACCEPTANCE`
+- Artifact success:
+  - command writes `runs/<run_id>/files/artifact.txt`
+  - acceptance: `artifact_exists: artifact.txt`
+- Artifact reject:
+  - `artifact_exists: ../artifact.txt`
+  - `artifact_exists: C:/Windows/...`
+  - `artifact_exists: //server/share/x.txt`
+  - expected: `failed` + `ERR_ACCEPTANCE`

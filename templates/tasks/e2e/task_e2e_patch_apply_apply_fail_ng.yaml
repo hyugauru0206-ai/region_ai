@@ -1,0 +1,25 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_patch_apply_apply_fail_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: patch_apply apply failure expected NG"
+  category: implementer
+spec:
+  command: patch_apply
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  patch:
+    format: unified
+    text: |
+      --- a/runs/__RUN_ID__/files/nonexistent.txt
+      +++ b/runs/__RUN_ID__/files/nonexistent.txt
+      @@ -1 +1 @@
+      -OLD
+      +NEW

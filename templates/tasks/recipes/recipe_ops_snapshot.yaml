@@ -1,0 +1,62 @@
+# recipe:
+#   id: ops_snapshot
+#   title: "Ops snapshot"
+#   expect: success
+#   uses: [pipeline, file_write, artifact_file_contains, artifact_file_regex, run_meta]
+#   notes: "copy-ready; E2E guard exists"
+apiVersion: v1
+kind: pipeline
+metadata:
+  id: recipe_ops_snapshot
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "Recipe: ops snapshot"
+  category: implementer
+artifact:
+  mirror_run_meta: true
+runtime:
+  timeout_ms: 120000
+steps:
+  - id: step1_write_ops_snapshot
+    task:
+      kind: file_write
+      files:
+        - path: "ops_snapshot_template.md"
+          text: |
+            # Ops Snapshot
+
+            - output_file: ops_snapshot_template.md
+
+            ## Whiteboard
+            - Now: template
+            - DoD: template
+            - last_design_id: template
+
+            ## Inbox (Recent Top 20)
+            - template
+
+            ## Taskify Tracking (Top 10)
+            - template
+
+            ## Runs (Top 10)
+            - template
+          mode: overwrite
+acceptance:
+  - type: artifact_exists
+    path: "written/ops_snapshot_template.md"
+  - type: artifact_file_contains
+    path: "written/ops_snapshot_template.md"
+    contains: "Ops Snapshot"
+  - type: artifact_file_contains
+    path: "written/ops_snapshot_template.md"
+    contains: "ops_snapshot_"
+  - type: artifact_file_regex
+    path: "written/ops_snapshot_template.md"
+    pattern: "## Whiteboard"
+  - type: artifact_file_regex
+    path: "written/ops_snapshot_template.md"
+    pattern: "## Inbox"
+  - type: artifact_file_regex
+    path: "written/ops_snapshot_template.md"
+    pattern: "## Runs"

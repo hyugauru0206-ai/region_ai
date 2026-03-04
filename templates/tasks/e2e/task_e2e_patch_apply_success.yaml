@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_patch_apply_success__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: patch_apply success"
+  category: implementer
+spec:
+  command: patch_apply
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  patch:
+    format: unified
+    text: |
+      --- /dev/null
+      +++ b/runs/__RUN_ID__/files/patch_apply.txt
+      @@ -0,0 +1 @@
+      +PATCH_APPLIED
+  acceptance:
+    - type: stdout_contains
+      text: "PATCH_APPLIED"
+    - type: artifact_exists
+      path: "patch_apply.txt"

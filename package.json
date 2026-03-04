@@ -1,0 +1,23 @@
+﻿{
+  "name": "region-ai-root",
+  "private": true,
+  "version": "0.0.0",
+  "scripts": {
+    "docs:check": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\docs_check.ps1",
+    "docs:check:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\docs_check.ps1 -Json",
+    "ci:smoke": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\ci_smoke.ps1",
+    "ci:smoke:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\ci_smoke.ps1 -Json",
+    "ci:smoke:gate:json": "node tools/ci_smoke_gate_runner.cjs",
+    "ui:build:smoke:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\ui_build_smoke.ps1 -Json",
+    "desktop:smoke:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_smoke.ps1 -Json",
+    "desktop:dev:all": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Start",
+    "desktop:dev:stop": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Stop",
+    "desktop:dev:status:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Status -Json",
+    "region_ai:start": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\start_region_ai.ps1",
+    "region_ai:stop": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\stop_region_ai.ps1",
+    "region_ai:status": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1",
+    "region_ai:status:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1 -Json",
+    "region_ai:status:json:check": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1 -Json | python -c \"import sys,json; json.loads(sys.stdin.read()); print('OK')\""
+  }
+}
+

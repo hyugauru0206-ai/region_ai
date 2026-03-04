@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_stderr_contains_pwsh__TEMPLATE
+  role: e2e
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: stderr_contains success"
+  category: e2e
+spec:
+  command: run_command
+  args:
+    mode: command
+    command: >-
+      "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "[Console]::WriteLine('STDERR_CASE_OK'); [Console]::Out.Flush(); [Console]::Error.WriteLine('EXPECTED_ERR'); [Console]::Error.Flush(); exit 0"
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  acceptance:
+    - type: stdout_contains
+      text: "STDERR_CASE_OK"
+    - type: stderr_contains
+      value: "EXPECTED_ERR"
+    - type: command_exit_code
+      exit_code: 0

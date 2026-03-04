@@ -1,0 +1,22 @@
+﻿# Prompt Pack: design_20260302_morning_brief_dashboard_recommended_profile_v3_1 (QA)
+
+## Design summary
+- Design: design_20260302_morning_brief_dashboard_recommended_profile_v3_1
+- Scope: Morning Brief + Dashboard recommended profile v3.1
+- Source: C:\work\region_ai\docs\design\design_20260302_morning_brief_dashboard_recommended_profile_v3_1.md
+
+## What to review
+- Deterministic verification plan
+- Flakiness and negative-path coverage
+- Evidence quality for pass/fail triage
+
+## Reply template
+- verdict: approved | noted
+- key_findings:
+  - <bullet>
+- risks:
+  - <bullet>
+- alternatives:
+  - <bullet>
+- missing_tests:
+  - <bullet>

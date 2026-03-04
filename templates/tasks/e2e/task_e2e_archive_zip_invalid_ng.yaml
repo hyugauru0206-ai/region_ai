@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_archive_zip_invalid_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: archive_zip schema invalid expected NG"
+  category: implementer
+spec:
+  command: archive_zip
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  inputs:
+    - "generated/**"
+  output:
+    zip_path: "bundles/output.zip"
+  limits:
+    max_files: "x"
+    max_total_bytes: 1024

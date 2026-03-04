@@ -1,0 +1,26 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_regex_stdout_pwsh__TEMPLATE
+  role: e2e
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: stdout_regex success"
+  category: e2e
+spec:
+  command: run_command
+  args:
+    mode: command
+    command: >-
+      "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "[Console]::WriteLine('token=OK_123'); [Console]::Out.Flush(); exit 0"
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  acceptance:
+    - type: stdout_regex
+      pattern: "token=OK_[0-9]{3}"
+    - type: command_exit_code
+      exit_code: 0
+

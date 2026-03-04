@@ -1,0 +1,703 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://region-ai.local/schemas/task.schema.json",
+  "oneOf": [
+    {
+      "type": "object",
+      "required": ["apiVersion", "kind", "metadata", "spec"],
+      "properties": {
+        "apiVersion": { "const": "v1" },
+        "kind": { "const": "Task" },
+        "metadata": {
+          "type": "object",
+          "required": ["id", "assignee", "created_at", "title"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "role": { "type": "string" },
+            "assignee": { "type": "string", "minLength": 1 },
+            "created_at": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 1 },
+            "priority": { "type": "string" },
+            "category": { "type": "string" },
+            "persona": { "type": "string" },
+            "parent_task_id": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "spec": {
+          "type": "object",
+          "required": ["command", "args"],
+          "properties": {
+            "command": { "type": "string", "enum": ["create_file", "apply_patch", "run_command", "patch_apply", "file_write", "archive_zip", "pipeline"] },
+            "args": { "type": "object" },
+            "patch": {
+              "type": "object",
+              "required": ["format", "text"],
+              "properties": {
+                "format": { "type": "string", "enum": ["unified"] },
+                "text": { "type": "string", "minLength": 1, "maxLength": 262144 }
+              }
+            },
+            "files": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 20,
+              "items": {
+                "type": "object",
+                "required": ["path", "text"],
+                "properties": {
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "text": { "type": "string", "maxLength": 262144 },
+                  "mode": { "type": "string", "enum": ["overwrite", "append"] }
+                }
+              }
+            },
+            "inputs": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 512,
+                "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+              }
+            },
+            "output": {
+              "type": "object",
+              "required": ["zip_path", "manifest_path"],
+              "properties": {
+                "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                "manifest_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" }
+              }
+            },
+            "options": {
+              "type": "object",
+              "properties": {
+                "follow_symlinks": { "type": "boolean" }
+              }
+            },
+            "limits": {
+              "type": "object",
+              "properties": {
+                "max_files": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 104857600 }
+              }
+            },
+            "runtime": {
+              "type": "object",
+              "properties": {
+                "timeout_ms": { "type": "number" },
+                "timeout_expected": { "type": "boolean" },
+                "timeout_expected_acceptance": { "enum": ["skip", "strict"] }
+              }
+            },
+            "context": {
+              "type": "object",
+              "properties": {
+                "repo_path": { "type": "string" }
+              }
+            },
+            "artifact": {
+              "type": "object",
+              "properties": {
+                "mirror_run_meta": { "type": "boolean" },
+                "mirror_run_meta_include": {
+                  "type": "array",
+                  "minItems": 1,
+                  "items": {
+                    "type": "string",
+                    "enum": ["task_yaml", "result_pre_acceptance_json", "result_final_json"]
+                  }
+                }
+              }
+            },
+            "acceptance": {
+              "type": "array",
+              "items": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "required": ["type", "text"],
+                    "properties": {
+                      "type": { "const": "stdout_contains" },
+                      "text": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "exit_code"],
+                    "properties": {
+                      "type": { "const": "command_exit_code" },
+                      "exit_code": { "type": "number" },
+                      "command": { "type": "string" },
+                      "timeout_ms": { "type": "number" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": { "const": "artifact_exists" },
+                      "path": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "contains"],
+                    "properties": {
+                      "type": { "const": "artifact_file_contains" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "contains": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "not_contains"],
+                    "properties": {
+                      "type": { "const": "artifact_file_not_contains" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "not_contains": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pattern"],
+                    "properties": {
+                      "type": { "const": "artifact_file_regex" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pattern"],
+                    "properties": {
+                      "type": { "const": "artifact_file_not_regex" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "equals"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_equals" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "equals": {}
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "pattern"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_regex" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_exists" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_not_exists" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "value"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_gt" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "value": { "type": "number" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "value"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_gte" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "value": { "type": "number" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "value"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_lt" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "value": { "type": "number" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path", "pointer", "value"],
+                    "properties": {
+                      "type": { "const": "artifact_json_pointer_lte" },
+                      "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pointer": { "type": "string", "maxLength": 1024 },
+                      "value": { "type": "number" }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "zip_path", "entry"],
+                    "properties": {
+                      "type": { "const": "artifact_zip_entry_exists" },
+                      "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "entry": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "zip_path", "entry"],
+                    "properties": {
+                      "type": { "const": "artifact_zip_entry_not_exists" },
+                      "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "entry": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "zip_path", "pattern"],
+                    "properties": {
+                      "type": { "const": "artifact_zip_entry_regex" },
+                      "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "zip_path", "pattern"],
+                    "properties": {
+                      "type": { "const": "artifact_zip_entry_not_regex" },
+                      "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "path"],
+                    "properties": {
+                      "type": { "const": "file_exists" },
+                      "path": { "type": "string", "minLength": 1 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "pattern"],
+                    "properties": {
+                      "type": { "const": "stdout_regex" },
+                      "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                      "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "value"],
+                    "properties": {
+                      "type": { "const": "stderr_contains" },
+                      "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "value"],
+                    "properties": {
+                      "type": { "const": "stdout_not_contains" },
+                      "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "required": ["type", "value"],
+                    "properties": {
+                      "type": { "const": "stderr_not_contains" },
+                      "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "required": ["apiVersion", "kind", "metadata", "steps"],
+      "properties": {
+        "apiVersion": { "const": "v1" },
+        "kind": { "const": "pipeline" },
+        "metadata": {
+          "type": "object",
+          "required": ["id", "assignee", "created_at", "title"],
+          "properties": {
+            "id": { "type": "string", "minLength": 1 },
+            "role": { "type": "string" },
+            "assignee": { "type": "string", "minLength": 1 },
+            "created_at": { "type": "string", "minLength": 1 },
+            "title": { "type": "string", "minLength": 1 },
+            "priority": { "type": "string" },
+            "category": { "type": "string" },
+            "persona": { "type": "string" },
+            "parent_task_id": { "type": "string" },
+            "tags": { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "runtime": {
+          "type": "object",
+          "properties": {
+            "timeout_ms": { "type": "number" },
+            "timeout_expected": { "type": "boolean" },
+            "timeout_expected_acceptance": { "enum": ["skip", "strict"] }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "required": ["task"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[A-Za-z0-9_.-]{1,64}$" },
+              "task": {
+                "type": "object",
+                "required": ["kind"],
+                "properties": {
+                  "kind": { "type": "string", "enum": ["run_command", "patch_apply", "create_file", "apply_patch", "file_write", "archive_zip"] },
+                  "args": { "type": "object" },
+                  "files": {
+                    "type": "array",
+                    "minItems": 1,
+                    "maxItems": 20,
+                    "items": {
+                      "type": "object",
+                      "required": ["path", "text"],
+                      "properties": {
+                        "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                        "text": { "type": "string", "maxLength": 262144 },
+                        "mode": { "type": "string", "enum": ["overwrite", "append"] }
+                      }
+                    }
+                  },
+                  "inputs": {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "minLength": 1,
+                      "maxLength": 512,
+                      "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+"
+                    }
+                  },
+                  "output": {
+                    "type": "object",
+                    "required": ["zip_path", "manifest_path"],
+                    "properties": {
+                      "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                      "manifest_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" }
+                    }
+                  },
+                  "options": {
+                    "type": "object",
+                    "properties": {
+                      "follow_symlinks": { "type": "boolean" }
+                    }
+                  },
+                  "limits": {
+                    "type": "object",
+                    "properties": {
+                      "max_files": { "type": "integer", "minimum": 1, "maximum": 1000 },
+                      "max_total_bytes": { "type": "integer", "minimum": 1, "maximum": 104857600 }
+                    }
+                  },
+                  "context": {
+                    "type": "object",
+                    "properties": {
+                      "repo_path": { "type": "string" }
+                    }
+                  },
+                  "runtime": {
+                    "type": "object",
+                    "properties": {
+                      "timeout_ms": { "type": "number" },
+                      "timeout_expected": { "type": "boolean" },
+                      "timeout_expected_acceptance": { "enum": ["skip", "strict"] }
+                    }
+                  },
+                  "patch": {
+                    "type": "object",
+                    "required": ["format", "text"],
+                    "properties": {
+                      "format": { "type": "string", "enum": ["unified"] },
+                      "text": { "type": "string", "minLength": 1, "maxLength": 262144 }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        },
+        "acceptance": {
+          "type": "array",
+          "items": {
+            "oneOf": [
+              {
+                "type": "object",
+                "required": ["type", "text"],
+                "properties": {
+                  "type": { "const": "stdout_contains" },
+                  "text": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "exit_code"],
+                "properties": {
+                  "type": { "const": "command_exit_code" },
+                  "exit_code": { "type": "number" },
+                  "command": { "type": "string" },
+                  "timeout_ms": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path"],
+                "properties": {
+                  "type": { "const": "artifact_exists" },
+                  "path": { "type": "string", "minLength": 1 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "contains"],
+                "properties": {
+                  "type": { "const": "artifact_file_contains" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "contains": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "not_contains"],
+                "properties": {
+                  "type": { "const": "artifact_file_not_contains" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "not_contains": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pattern"],
+                "properties": {
+                  "type": { "const": "artifact_file_regex" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pattern"],
+                "properties": {
+                  "type": { "const": "artifact_file_not_regex" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "equals"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_equals" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "equals": {}
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "pattern"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_regex" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_exists" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_not_exists" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "value"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_gt" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "value"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_gte" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "value"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_lt" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "path", "pointer", "value"],
+                "properties": {
+                  "type": { "const": "artifact_json_pointer_lte" },
+                  "path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pointer": { "type": "string", "maxLength": 1024 },
+                  "value": { "type": "number" }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "zip_path", "entry"],
+                "properties": {
+                  "type": { "const": "artifact_zip_entry_exists" },
+                  "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "entry": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "zip_path", "entry"],
+                "properties": {
+                  "type": { "const": "artifact_zip_entry_not_exists" },
+                  "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "entry": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "zip_path", "pattern"],
+                "properties": {
+                  "type": { "const": "artifact_zip_entry_regex" },
+                  "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "zip_path", "pattern"],
+                "properties": {
+                  "type": { "const": "artifact_zip_entry_not_regex" },
+                  "zip_path": { "type": "string", "minLength": 1, "maxLength": 512, "pattern": "^(?![A-Za-z]:)(?!\\\\\\\\)(?!/)(?!.*(?:^|[\\\\/])\\.\\.(?:[\\\\/]|$)).+" },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "pattern"],
+                "properties": {
+                  "type": { "const": "stdout_regex" },
+                  "pattern": { "type": "string", "minLength": 1, "maxLength": 1024 },
+                  "flags": { "type": "string", "pattern": "^[imsu]{0,4}$", "maxLength": 4 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                  "type": { "const": "stderr_contains" },
+                  "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                  "type": { "const": "stdout_not_contains" },
+                  "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              },
+              {
+                "type": "object",
+                "required": ["type", "value"],
+                "properties": {
+                  "type": { "const": "stderr_not_contains" },
+                  "value": { "type": "string", "minLength": 1, "maxLength": 1024 }
+                }
+              }
+            ]
+          }
+        }
+        ,
+        "artifact": {
+          "type": "object",
+          "properties": {
+            "mirror_run_meta": { "type": "boolean" },
+            "mirror_run_meta_include": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string",
+                "enum": ["task_yaml", "result_pre_acceptance_json", "result_final_json"]
+              }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

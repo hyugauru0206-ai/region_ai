@@ -1,0 +1,22 @@
+﻿# Prompt Pack: design_20260224_e2e_forbidden_parallel_guard (QA)
+
+## Design summary
+- Design: design_20260224_e2e_forbidden_parallel_guard
+- Scope: E2E forbidden parallel guard in run_e2e.ps1
+- Source: C:\Users\hyuga\region_ai\docs\design\design_20260224_e2e_forbidden_parallel_guard.md
+
+## What to review
+- Deterministic verification plan
+- Flakiness and negative-path coverage
+- Evidence quality for pass/fail triage
+
+## Reply template
+- verdict: approved | noted
+- key_findings:
+  - <bullet>
+- risks:
+  - <bullet>
+- alternatives:
+  - <bullet>
+- missing_tests:
+  - <bullet>

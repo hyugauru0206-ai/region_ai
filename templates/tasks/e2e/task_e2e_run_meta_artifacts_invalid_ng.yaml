@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_run_meta_artifacts_invalid_ng__TEMPLATE
+  role: implementer
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00"
+  title: "E2E: run meta artifacts invalid include NG"
+  category: implementer
+spec:
+  command: file_write
+  args: {}
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 10000
+    timeout_expected: false
+  artifact:
+    mirror_run_meta: true
+    mirror_run_meta_include:
+      - task_yaml
+      - result_unknown_json
+  files:
+    - path: "generated/meta_invalid.txt"
+      text: "x\n"
+      mode: overwrite
+  acceptance:
+    - type: stdout_contains
+      text: "FILE_WRITE_OK"

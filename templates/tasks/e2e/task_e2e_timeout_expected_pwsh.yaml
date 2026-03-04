@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Task
+metadata:
+  id: task_e2e_timeout_expected_pwsh__TEMPLATE
+  role: 運用
+  assignee: implementer_01
+  created_at: "1970-01-01T00:00:00+09:00" # overwritten when queued
+  title: "E2E: timeout expected (powershell, flushed)"
+  category: 検証
+spec:
+  command: run_command
+  args:
+    mode: command
+    command: >-
+      "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe" -NoProfile -Command "[Console]::WriteLine('DONE'); [Console]::Out.Flush(); Start-Sleep -Seconds 30"
+  context:
+    repo_path: "."
+  runtime:
+    timeout_ms: 2000
+    timeout_expected: true
+  acceptance:
+    - type: stdout_contains
+      text: "DONE"

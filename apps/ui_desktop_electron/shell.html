@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>region_ai desktop bridge</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #1e1f22;
+        --line: #36383f;
+        --btn: #2c2f35;
+        --text: #e9ebee;
+      }
+      html, body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        font-family: "Segoe UI", "Noto Sans JP", sans-serif;
+        background: var(--bg);
+        color: var(--text);
+      }
+      .bar {
+        height: 52px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 10px;
+        border-bottom: 1px solid var(--line);
+        background: linear-gradient(120deg, #272a33, #1f2329);
+      }
+      button, input {
+        background: var(--btn);
+        color: var(--text);
+        border: 1px solid #444954;
+        border-radius: 8px;
+        padding: 7px 10px;
+      }
+      input {
+        min-width: 300px;
+      }
+      .role-tabs {
+        display: inline-flex;
+        gap: 4px;
+        margin-left: 6px;
+      }
+      .role-tab {
+        padding: 6px 9px;
+        font-size: 12px;
+      }
+      .role-tab.active {
+        border-color: #7aa2ff;
+        background: #2d3852;
+      }
+      .active-role {
+        font-size: 12px;
+        color: #d1dbf5;
+      }
+      .status {
+        margin-left: auto;
+        font-size: 12px;
+        color: #b4bac7;
+      }
+      .payload {
+        font-size: 11px;
+        color: #9fb3ca;
+        margin-left: 8px;
+      }
+      .modal-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(0, 0, 0, 0.55);
+        display: none;
+        align-items: center;
+        justify-content: center;
+      }
+      .modal-backdrop.open {
+        display: flex;
+      }
+      .modal {
+        width: min(760px, 92vw);
+        max-height: 82vh;
+        overflow: auto;
+        border: 1px solid #3e4654;
+        border-radius: 12px;
+        background: #171b22;
+        padding: 14px;
+      }
+      .modal pre {
+        white-space: pre-wrap;
+        word-break: break-word;
+        background: #0f1217;
+        border: 1px solid #333b48;
+        border-radius: 8px;
+        padding: 10px;
+        max-height: 46vh;
+        overflow: auto;
+      }
+      .modal-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <input id="payload" placeholder="optional manual payload (empty = selected/bus/clipboard)" />
+      <div class="role-tabs" id="roleTabs">
+        <button type="button" class="role-tab" data-role="facilitator">司会</button>
+        <button type="button" class="role-tab" data-role="design">設計</button>
+        <button type="button" class="role-tab" data-role="impl">実装</button>
+        <button type="button" class="role-tab" data-role="qa">検証</button>
+        <button type="button" class="role-tab" data-role="jester">道化師</button>
+      </div>
+      <button id="copyChatgptBtn">Copy for ChatGPT</button>
+      <button id="copyCodexBtn">Copy for CODEX</button>
+      <button id="focusBtn">Focus ChatGPT</button>
+      <button id="pasteBtn">Paste</button>
+      <button id="sendBtn">Send (confirm)</button>
+      <button id="captureLastBtn">Capture last</button>
+      <button id="captureBtn">Capture selection</button>
+      <span class="active-role" id="activeRoleLabel">role: facilitator</span>
+      <span class="payload" id="payloadInfo">selected: none</span>
+      <span class="status" id="status">ready</span>
+    </div>
+    <div id="confirmModal" class="modal-backdrop">
+      <div class="modal">
+        <h3>Confirm send</h3>
+        <p>This will attempt auto-send. If failed, bridge falls back to Focus+Paste.</p>
+        <pre id="confirmPreview"></pre>
+        <div class="modal-actions">
+          <button id="confirmCancelBtn" type="button">Cancel</button>
+          <button id="confirmSendBtn" type="button">Send</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const statusEl = document.getElementById("status");
+      const payloadEl = document.getElementById("payload");
+      const payloadInfoEl = document.getElementById("payloadInfo");
+      const activeRoleLabelEl = document.getElementById("activeRoleLabel");
+      const confirmModalEl = document.getElementById("confirmModal");
+      const confirmPreviewEl = document.getElementById("confirmPreview");
+      const roleButtons = Array.from(document.querySelectorAll(".role-tab"));
+      let selectedPayload = null;
+      let pendingSendText = "";
+      let activeRole = "facilitator";
+      function setStatus(t) {
+        statusEl.textContent = t;
+      }
+      function renderRoleTabs() {
+        roleButtons.forEach((btn) => {
+          const role = String(btn.dataset.role || "");
+          btn.classList.toggle("active", role === activeRole);
+        });
+        activeRoleLabelEl.textContent = "role: " + activeRole;
+      }
+      async function applyActiveRole(role, focus) {
+        const nextRole = String(role || "facilitator");
+        const out = await window.bridge.setActiveRole(nextRole);
+        activeRole = (out && out.role) ? String(out.role) : nextRole;
+        renderRoleTabs();
+        if (focus !== false) {
+          await window.bridge.focus("chatgpt");
+        }
+      }
+      function openConfirmModal(text) {
+        pendingSendText = text || "";
+        confirmPreviewEl.textContent = pendingSendText || "(empty)";
+        confirmModalEl.classList.add("open");
+      }
+      function closeConfirmModal() {
+        confirmModalEl.classList.remove("open");
+        pendingSendText = "";
+      }
+      function setSelectedPayload(p) {
+        selectedPayload = p && typeof p === "object" ? p : null;
+        payloadInfoEl.textContent = selectedPayload ? ("selected: " + (selectedPayload.msg_id || "message")) : "selected: none";
+      }
+      window.addEventListener("message", (event) => {
+        const data = event && event.data ? event.data : {};
+        if (!data || data.type !== "regionai:selected") return;
+        setSelectedPayload(data.payload || null);
+        window.bridge.setSelectedPayload(data.payload || null);
+      });
+      window.bridge.onSelectedPayload((payload) => {
+        setSelectedPayload(payload || null);
+      });
+      window.bridge.getSelectedPayload().then((out) => {
+        setSelectedPayload((out && out.payload) ? out.payload : null);
+      });
+      window.bridge.getActiveRole().then((out) => {
+        activeRole = (out && out.role) ? String(out.role) : "facilitator";
+        renderRoleTabs();
+      });
+      window.bridge.onActiveRoleChanged((payload) => {
+        const role = payload && payload.role ? String(payload.role) : "";
+        if (!role) return;
+        activeRole = role;
+        renderRoleTabs();
+      });
+      roleButtons.forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          const role = String(btn.dataset.role || "");
+          await applyActiveRole(role, true);
+          setStatus("role switched: " + activeRole);
+        });
+      });
+      document.getElementById("copyChatgptBtn").addEventListener("click", async () => {
+        const text = payloadEl.value || "";
+        const out = await window.bridge.copyFor("chatgpt", text);
+        setStatus("copy(chatgpt): " + (out && out.source ? out.source : "unknown"));
+      });
+      document.getElementById("copyCodexBtn").addEventListener("click", async () => {
+        const text = payloadEl.value || "";
+        const out = await window.bridge.copyFor("codex", text);
+        setStatus("copy(codex): " + (out && out.source ? out.source : "unknown"));
+      });
+      document.getElementById("focusBtn").addEventListener("click", async () => {
+        await window.bridge.focus("chatgpt");
+        setStatus("chatgpt focused");
+      });
+      document.getElementById("pasteBtn").addEventListener("click", async () => {
+        const out = await window.bridge.pasteToChatGPT();
+        setStatus("paste: " + (out && out.mode ? out.mode : "done"));
+      });
+      document.getElementById("sendBtn").addEventListener("click", async () => {
+        const resolved = await window.bridge.resolveTextFor("chatgpt", payloadEl.value || "");
+        openConfirmModal((resolved && resolved.text) ? resolved.text : "");
+      });
+      document.getElementById("captureBtn").addEventListener("click", async () => {
+        const out = await window.bridge.captureSelectionFromChatGPT();
+        setStatus("captured: " + ((out && out.captured) ? out.captured.length : 0) + " chars");
+      });
+      document.getElementById("captureLastBtn").addEventListener("click", async () => {
+        const out = await window.bridge.captureLastAssistant();
+        if (out && out.ok) {
+          setStatus("capture last: saved (" + (out.mode || "ok") + ", len=" + (out.text_len || 0) + ")");
+        } else {
+          const reason = (out && out.reason) ? out.reason : "unknown";
+          setStatus("capture last failed -> fallback to selection. reason=" + reason);
+        }
+      });
+      document.getElementById("confirmCancelBtn").addEventListener("click", () => {
+        closeConfirmModal();
+        setStatus("send canceled");
+      });
+      document.getElementById("confirmSendBtn").addEventListener("click", async () => {
+        const out = await window.bridge.sendToChatGPT(pendingSendText);
+        closeConfirmModal();
+        if (out && out.ok) {
+          setStatus("sent: " + (out.mode || "ok"));
+        } else {
+          const mode = (out && out.mode) ? out.mode : "failed";
+          const reason = (out && out.reason) ? out.reason : "unknown";
+          setStatus("send failed -> fallback. " + mode + " / " + reason + " (manual send available)");
+        }
+      });
+    </script>
+  </body>
+</html>

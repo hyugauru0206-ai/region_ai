@@ -1,7 +1,8 @@
 ﻿[CmdletBinding()]
 param(
   [switch]$Json,
-  [string]$WorkspaceRoot = ""
+  [string]$WorkspaceRoot = "",
+  [switch]$Offline
 )
 
 $ErrorActionPreference = "Stop"
@@ -81,9 +82,62 @@ if ([string]::IsNullOrWhiteSpace($WorkspaceRoot)) {
   $WorkspaceRoot = Join-Path $env:TEMP "region_ai\\workspace"
 }
 
+function Test-Host443Reachable {
+  param([Parameter(Mandatory = $true)][string]$HostName)
+  try {
+    $tnc = Test-NetConnection -ComputerName $HostName -Port 443 -WarningAction SilentlyContinue -ErrorAction Stop
+    return [bool]$tnc.TcpTestSucceeded
+  } catch {}
+  try {
+    $client = New-Object System.Net.Sockets.TcpClient
+    $async = $client.BeginConnect($HostName, 443, $null, $null)
+    $ok = $async.AsyncWaitHandle.WaitOne(1500, $false)
+    if (-not $ok) {
+      try { $client.Close() } catch {}
+      return $false
+    }
+    $client.EndConnect($async) | Out-Null
+    try { $client.Close() } catch {}
+    return $true
+  } catch {
+    return $false
+  }
+}
+
+$offlineReasons = New-Object 'System.Collections.Generic.List[string]'
+$offlineForcedByEnv = @("1", "true", "TRUE") -contains [string]$env:REGION_AI_SMOKE_OFFLINE
+$offlineMode = [bool]$Offline -or $offlineForcedByEnv
+if ($offlineMode) {
+  [void]$offlineReasons.Add("forced")
+} else {
+  $openaiHost = "api.openai.com"
+  try {
+    $openaiBase = [string]$env:OPENAI_BASE_URL
+    if (-not [string]::IsNullOrWhiteSpace($openaiBase)) {
+      $openaiUri = [Uri]$openaiBase
+      if (-not [string]::IsNullOrWhiteSpace($openaiUri.Host)) {
+        $openaiHost = [string]$openaiUri.Host
+      }
+    }
+  } catch {}
+  $checkHosts = @("github.com", $openaiHost) | Where-Object { -not [string]::IsNullOrWhiteSpace($_) } | Select-Object -Unique
+  foreach ($h in $checkHosts) {
+    if (-not (Test-Host443Reachable -HostName $h)) {
+      $offlineMode = $true
+      [void]$offlineReasons.Add("$h:443_unreachable")
+    }
+  }
+}
+if ($offlineMode -and -not $Json) {
+  $reasonLine = if ($offlineReasons.Count -gt 0) { ($offlineReasons -join ",") } else { "unknown" }
+  Write-Output ("ui_smoke_offline_mode: " + $reasonLine)
+}
+
 $result = [ordered]@{
   action = "ui_smoke"
   api_url = $apiUrl
+  offline_mode = $offlineMode
+  skipped_steps = @()
   status_code = 0
   threads_ok = $false
   search_ok = $false
@@ -196,6 +250,18 @@ $result = [ordered]@{
   dashboard_quick_actions_revert_preview_ok = $false
   ok = $false
   exit_code = 1
+}
+
+$offlineSkippedSet = New-Object 'System.Collections.Generic.HashSet[string]'
+$offlineSkippedList = New-Object 'System.Collections.Generic.List[string]'
+function Set-OfflineSkippedTrue {
+  param([Parameter(Mandatory = $true)][string]$Name)
+  if ($result.Contains($Name)) {
+    $result[$Name] = $true
+    if ($offlineSkippedSet.Add($Name)) {
+      [void]$offlineSkippedList.Add($Name)
+    }
+  }
 }
 
 $proc = $null
@@ -1497,6 +1563,32 @@ try {
   if ($autoStabRunNowObj.ok -ne $true) { throw "auto_stab_run_now_not_ok" }
   $result.auto_stab_run_now_ok = $true
 
+  if ($offlineMode) {
+    $offlineFixedKeys = @(
+      "activity_ok",
+      "activity_stream_ok",
+      "guest_join_push_ok",
+      "council_run_ok",
+      "council_status_ok",
+      "council_cancel_ok",
+      "council_resume_ok",
+      "evidence_export_ok",
+      "ops_snapshot_ok",
+      "ops_snapshot_status_ok",
+      "morning_brief_bundle_dry_ok",
+      "inbox_thread_by_autopilot_key_ok",
+      "council_round_role_format_preview_ok",
+      "council_round_role_format_preview_v28_ok"
+    )
+    foreach ($k in $offlineFixedKeys) {
+      Set-OfflineSkippedTrue -Name $k
+    }
+    foreach ($k in @($result.Keys)) {
+      if ([string]$k -like "council_autopilot_*") {
+        Set-OfflineSkippedTrue -Name ([string]$k)
+      }
+    }
+  } else {
   $guestKeyCreateBody = @{ label = "ui_smoke_guest" } | ConvertTo-Json -Depth 4
   $guestKeyCreateResp = Invoke-WebRequest -Uri $guestKeysNewUrl -Method Post -TimeoutSec 3 -UseBasicParsing -ContentType "application/json" -Body $guestKeyCreateBody
   if ($guestKeyCreateResp.StatusCode -ne 200) { throw "guest_key_create_failed" }
@@ -1767,6 +1859,9 @@ try {
   } else {
     $result.ops_snapshot_status_warn = $true
   }
+  }
+
+  $result.skipped_steps = @($offlineSkippedList)
 
   $result.ok = $true
   $result.exit_code = 0

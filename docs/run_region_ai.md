@@ -126,6 +126,11 @@
   - If pack files are missing, `ui_build_smoke` fails with `deps_pack_missing`.
 - Smoke check:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Json`
+  - Network-limited mode (443 blocked):
+    - PowerShell: `$env:REGION_AI_SMOKE_OFFLINE="1"`
+    - cmd.exe: `set REGION_AI_SMOKE_OFFLINE=1`
+    - `ui_smoke` adds `offline_mode=true` and `skipped_steps=[...]` in JSON while keeping legacy `*_ok` keys.
+    - After moving to a machine that can reach `github.com:443`, rerun smoke/gate without offline mode for full validation.
 - UI channels (additive):
   - `#繝｡繝ｳ繝舌・`: org agents registry (status / assigned thread edit)
     - includes `Memory` panel (episodes/knowledge/procedures browse/search/append)

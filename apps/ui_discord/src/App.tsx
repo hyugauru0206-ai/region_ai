@@ -3762,6 +3762,14 @@ export function App(): JSX.Element {
       Promise.all([refreshDailyLoopDashboard(), refreshDashboardYesterdayMemo(), refreshOpsQuickActionsStatus(), refreshOpsAutoStabilize()]).catch((e: any) => setStatus(String(e?.message || e)));
       void restoreTrackerHistoryFromWorkspace(true);
     }
+    if (activeChannel === "office") {
+      Promise.all([refreshOrgAgents(), refreshOrgGuests(), refreshActivity(), refreshDailyLoopDashboard(), refreshDashboardYesterdayMemo(), refreshCouncilStatus(), refreshOpsQuickActionsStatus()])
+        .catch((e: any) => setStatus(String(e?.message || e)));
+    }
+    if (activeChannel === "debate") {
+      Promise.all([refreshCouncilStatus(), refreshInbox(), refreshOrgAgents(), refreshDailyLoopDashboard()])
+        .catch((e: any) => setStatus(String(e?.message || e)));
+    }
   }, [activeChannel]);
 
   useEffect(() => {
@@ -4757,11 +4765,30 @@ export function App(): JSX.Element {
     return ax - bx;
   });
   const orderedGuests = [...orgGuests].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
-  const debateBubbles: Array<{ role: string; agentId: string; text: string }> = [
-    { role: "司会", agentId: "facilitator", text: "司会: data not available" },
-    { role: "批判役", agentId: "designer", text: "批判役: data not available" },
-    { role: "実務", agentId: "implementer", text: "実務: data not available" },
-    { role: "道化師", agentId: "joker", text: "道化師: data not available" },
+  const officeConnectionMode = dashboardSseConnected ? "LIVE" : (dashboardHeartbeatStatus === "err" ? "DISCONNECTED" : "POLL");
+  const officeRunStatus = String(councilStatus?.run?.status || "-");
+  const officeRunId = String(councilStatus?.run?.run_id || councilRunId || "").trim();
+  const officeQueueLabel = String(taskifyTrackingItem?.status || "-");
+  const officeAutopilotLabel = String(dailyLoopDashboard?.morning_brief?.last_autopilot_run_id || "-");
+  const officeRoutinesLabel = [
+    `heartbeat:${String(dailyLoopDashboard?.heartbeat?.last_ok_at || "-")}`,
+    `suggest:${String(dailyLoopDashboard?.suggest?.last_auto_accept_at || "-")}`,
+    `consolidation:${String(dailyLoopDashboard?.consolidation?.facilitator?.last_run_at || "-")}`,
+  ].join(" | ");
+  const latestDebateRound = inboxItems.find((x) => String(x.source || "").trim() === "council_autopilot_round")
+    || inboxItems.find((x) => String(x.title || "").toLowerCase().includes("round"));
+  const debateBody = String(latestDebateRound?.body || "").trim();
+  const debateLines = debateBody ? debateBody.split(/\r?\n/).map((x) => x.trim()).filter((x) => !!x) : [];
+  const debateBubble = (prefix: string, fallback: string): string => {
+    const line = debateLines.find((x) => x.startsWith(prefix));
+    if (line) return line;
+    return fallback;
+  };
+  const debateBubbles = [
+    { role: "司会", agentId: "facilitator", text: debateBubble("司会:", "司会: data not available") },
+    { role: "批判役", agentId: "designer", text: debateBubble("批判役:", "批判役: data not available") },
+    { role: "実務", agentId: "implementer", text: debateBubble("実務:", "実務: data not available") },
+    { role: "道化師", agentId: "joker", text: debateBubble("道化師:", "道化師: data not available") },
   ];
   const workspaceEmptySeatCount = Math.max(0, 6 - (orderedAgents.length + orderedGuests.length));
   const workspaceEmptySeats = Array.from({ length: workspaceEmptySeatCount }, (_, i) => i);
@@ -5762,16 +5789,25 @@ export function App(): JSX.Element {
             <section className="so-panel office-control">
               <div className="so-header">
                 <strong>Control Room</strong>
-                <span className="so-muted">Not available</span>
+                <span className={`dashboard-badge ${officeConnectionMode === "LIVE" ? "status-ok" : (officeConnectionMode === "POLL" ? "status-warn" : "status-err")}`}>{officeConnectionMode}</span>
               </div>
               <div className="office-grid">
                 <div className="so-card">
-                  <div className="so-muted">Connection</div>
-                  <div>POLL</div>
+                  <div className="so-muted">Run</div>
+                  <div className="wrapAnywhere">status: {officeRunStatus}</div>
+                  <div className="wrapAnywhere">run_id: {officeRunId || "-"}</div>
                 </div>
                 <div className="so-card">
-                  <div className="so-muted">Run / Queue / Autopilot / Routines</div>
-                  <div className="wrapAnywhere">Not available</div>
+                  <div className="so-muted">Queue</div>
+                  <div className="wrapAnywhere">{officeQueueLabel}</div>
+                </div>
+                <div className="so-card">
+                  <div className="so-muted">Autopilot</div>
+                  <div className="wrapAnywhere">{officeAutopilotLabel}</div>
+                </div>
+                <div className="so-card">
+                  <div className="so-muted">Routines</div>
+                  <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                 </div>
               </div>
             </section>
@@ -5844,10 +5880,10 @@ export function App(): JSX.Element {
               <div className="composer-actions">
                 <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId("facilitator"); }}>Traits</button>
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
-                <button type="button" disabled>Thread</button>
-                <button type="button" disabled>Tracker/Run</button>
+                <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
+                <button type="button" disabled={!officeRunId} onClick={() => jumpToRun(officeRunId)}>Tracker/Run</button>
               </div>
-              <div className="so-muted">data not available</div>
+              <div className="so-muted">Round source: {latestDebateRound ? (latestDebateRound.id || latestDebateRound.source || "available") : "data not available"}</div>
             </section>
           </div>
         )}

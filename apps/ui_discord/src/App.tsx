@@ -919,12 +919,17 @@ type DesktopSettingsForm = {
   hotkey_capture_last: string;
   hotkey_focus_region: string;
 };
+type UiTheme = "staroffice" | "simple";
+type UiEffects = "off" | "minimal" | "fun";
+type GuardedActionKind = "autopilot_pause" | "autopilot_resume" | "cancel_run" | "retry_failed_items";
 
 const API_BASE = import.meta.env.VITE_UI_API_BASE || "http://127.0.0.1:8787";
 const TRACKER_HISTORY_STORAGE_KEY = "regionai.tracker_history.v1";
 const TRACKER_HISTORY_AUTO_CLOSE_STORAGE_KEY = "regionai.tracker_autoclose_success.v1";
 const CHARACTER_SHEET_LAST_AGENT_STORAGE_KEY = "regionai.character_sheet_last_agent.v1";
 const TRACKER_HISTORY_EXPORT_SCHEMA_V1 = "regionai.tracker_history.export.v1";
+const UI_THEME_STORAGE_KEY = "regionai.ui.theme.v1";
+const UI_EFFECTS_STORAGE_KEY = "regionai.ui.effects.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1195,6 +1200,12 @@ export function App(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
+  const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
+    const raw = String(localStorage.getItem(UI_EFFECTS_STORAGE_KEY) || "").trim();
+    if (raw === "off" || raw === "fun") return raw;
+    return "minimal";
+  });
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [pins, setPins] = useState<string[]>([]);
   const [readState, setReadState] = useState<ReadStateMap>({});
@@ -1398,6 +1409,12 @@ export function App(): JSX.Element {
   const [opsAutoExecuteMaxPerDay, setOpsAutoExecuteMaxPerDay] = useState("1");
   const [opsQuickConfirmOpen, setOpsQuickConfirmOpen] = useState(false);
   const [opsQuickPendingAction, setOpsQuickPendingAction] = useState<{ label: string; endpoint: string; payload: Record<string, unknown>; warning?: string } | null>(null);
+  const [guardedActionOpen, setGuardedActionOpen] = useState(false);
+  const [guardedActionPhrase, setGuardedActionPhrase] = useState("");
+  const [guardedActionKind, setGuardedActionKind] = useState<GuardedActionKind | "">("");
+  const [guardedActionTitle, setGuardedActionTitle] = useState("");
+  const [guardedActionWarning, setGuardedActionWarning] = useState("");
+  const [guardedActionPreflight, setGuardedActionPreflight] = useState<Record<string, unknown> | null>(null);
   const [dashboardSseConnected, setDashboardSseConnected] = useState(false);
   const [dashboardLastRefreshAt, setDashboardLastRefreshAt] = useState("");
   const [dashboardLastEventId, setDashboardLastEventId] = useState("");
@@ -2744,6 +2761,48 @@ export function App(): JSX.Element {
   function openPrimaryDebate(): void {
     setActiveChannel("debate");
     setStatus("navigate:debate");
+  }
+
+  function openGuardedAction(kind: GuardedActionKind, title: string, warning: string, preflight: Record<string, unknown>): void {
+    setGuardedActionKind(kind);
+    setGuardedActionTitle(title);
+    setGuardedActionWarning(warning);
+    setGuardedActionPreflight(preflight);
+    setGuardedActionPhrase("");
+    setGuardedActionOpen(true);
+  }
+
+  async function executeGuardedActionConfirmed(): Promise<void> {
+    if (guardedActionPhrase.trim() !== "APPLY") {
+      showToast("Type APPLY to continue");
+      return;
+    }
+    try {
+      if (guardedActionKind === "autopilot_pause" || guardedActionKind === "cancel_run") {
+        await cancelCouncilRun();
+      } else if (guardedActionKind === "autopilot_resume") {
+        await resumeCouncilRun();
+      } else if (guardedActionKind === "retry_failed_items") {
+        const token = String(opsQuickStatus?.confirm_token || "").trim();
+        if (!token) {
+          showToast("confirm_token missing");
+          return;
+        }
+        const out = await apiPost<Record<string, unknown>>("/api/ops/quick_actions/stabilize", {
+          mode: "safe_run",
+          include_run_now: false,
+          confirm_token: token,
+          dry_run: false,
+        });
+        setOpsQuickResult(out);
+        setDailyLoopActionResult(out);
+        await Promise.all([refreshOpsQuickActionsStatus(), refreshDailyLoopDashboard(), refreshInbox()]);
+      }
+      setGuardedActionOpen(false);
+      showToast(`${guardedActionTitle} done`);
+    } catch (e: any) {
+      showToast(`${guardedActionTitle} failed: ${String(e?.message || e)}`);
+    }
   }
 
   function openDashboardNextActionThread(threadKeyInput: string): void {
@@ -4302,6 +4361,20 @@ export function App(): JSX.Element {
   }, [commandPaletteOpen]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(UI_THEME_STORAGE_KEY, uiTheme);
+    } catch {}
+    document.documentElement.setAttribute("data-ui-theme", uiTheme);
+  }, [uiTheme]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(UI_EFFECTS_STORAGE_KEY, uiEffects);
+    } catch {}
+    document.documentElement.setAttribute("data-ui-effects", uiEffects);
+  }, [uiEffects]);
+
+  useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
       const data = ev.data;
       if (!data || typeof data !== "object") return;
@@ -4910,6 +4983,15 @@ export function App(): JSX.Element {
             <button type="button" onClick={() => copyBus("chatgpt")}>Copy for ChatGPT</button>
             <button type="button" onClick={() => copyBus("codex")}>Copy for CODEX</button>
             <button type="button" onClick={() => pasteFromClipboard()}>Paste</button>
+            <select value={uiTheme} onChange={(e) => setUiTheme((e.target.value === "simple" ? "simple" : "staroffice"))}>
+              <option value="staroffice">Theme: StarOffice</option>
+              <option value="simple">Theme: Simple</option>
+            </select>
+            <select value={uiEffects} onChange={(e) => setUiEffects((e.target.value === "off" || e.target.value === "fun") ? e.target.value : "minimal")}>
+              <option value="off">Effects: OFF</option>
+              <option value="minimal">Effects: Minimal</option>
+              <option value="fun">Effects: Fun</option>
+            </select>
             <select value={composerRole} onChange={(e) => setComposerRole(e.target.value)}>
               {Object.keys(ROLE_COLORS).map((r) => <option key={r} value={r}>{r}</option>)}
             </select>
@@ -5810,6 +5892,56 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                 </div>
               </div>
+              <div className="composer-actions">
+                <button
+                  type="button"
+                  disabled={!officeRunId}
+                  onClick={() => openGuardedAction(
+                    "autopilot_pause",
+                    "Autopilot Pause",
+                    "Cancels active run to pause autoplay loop.",
+                    { run_id: officeRunId || null, channel: activeChannel, impact: "council_run_cancel" },
+                  )}
+                >
+                  Autopilot Pause (guarded)
+                </button>
+                <button
+                  type="button"
+                  disabled={!officeRunId}
+                  onClick={() => openGuardedAction(
+                    "autopilot_resume",
+                    "Autopilot Resume",
+                    "Resumes paused council run.",
+                    { run_id: officeRunId || null, channel: activeChannel, impact: "council_run_resume" },
+                  )}
+                >
+                  Resume (guarded)
+                </button>
+                <button
+                  type="button"
+                  className="dangerAction"
+                  disabled={!officeRunId}
+                  onClick={() => openGuardedAction(
+                    "cancel_run",
+                    "Cancel Active Run",
+                    "Cancels active run immediately.",
+                    { run_id: officeRunId || null, channel: activeChannel, impact: "council_run_cancel" },
+                  )}
+                >
+                  Cancel Run (guarded)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openGuardedAction(
+                    "retry_failed_items",
+                    "Retry Failed Items",
+                    "Runs safe retry for failed items (no run_now).",
+                    { workspace: "default", mode: "safe_run", include_run_now: false },
+                  )}
+                >
+                  Retry Failed (guarded)
+                </button>
+              </div>
             </section>
             <section className="so-panel office-canvas">
               <div className="so-header">
@@ -5882,6 +6014,21 @@ export function App(): JSX.Element {
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
                 <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
                 <button type="button" disabled={!officeRunId} onClick={() => jumpToRun(officeRunId)}>Tracker/Run</button>
+              </div>
+              <div className="composer-actions">
+                <button
+                  type="button"
+                  className="dangerAction"
+                  disabled={!officeRunId}
+                  onClick={() => openGuardedAction(
+                    "cancel_run",
+                    "Cancel Active Run",
+                    "Cancels active council run from debate stage.",
+                    { run_id: officeRunId || null, channel: activeChannel, impact: "council_run_cancel" },
+                  )}
+                >
+                  Cancel Run (guarded)
+                </button>
               </div>
               <div className="so-muted">Round source: {latestDebateRound ? (latestDebateRound.id || latestDebateRound.source || "available") : "data not available"}</div>
             </section>
@@ -6771,6 +6918,35 @@ export function App(): JSX.Element {
             </section>
           </div>
         )}
+        {guardedActionOpen && guardedActionKind ? (
+          <div className="confirmOverlay">
+            <div className="confirmDialog">
+              <div className="row-head"><strong>{guardedActionTitle || "Confirm action"}</strong></div>
+              <div className="empty">Preflight and impact scope are shown below. Execute only if expected.</div>
+              {guardedActionWarning ? <div className="empty dangerText wrapAnywhere">{guardedActionWarning}</div> : null}
+              <pre className="jsonOutput">{JSON.stringify(guardedActionPreflight || {}, null, 2)}</pre>
+              <label className="quickExecuteInputLabel">
+                Type APPLY to confirm
+                <input value={guardedActionPhrase} onChange={(e) => setGuardedActionPhrase(e.target.value)} />
+              </label>
+              <div className="composer-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setGuardedActionOpen(false);
+                    setGuardedActionKind("");
+                    setGuardedActionPhrase("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button type="button" className="dangerAction" disabled={guardedActionPhrase.trim() !== "APPLY"} onClick={() => void executeGuardedActionConfirmed()}>
+                  Confirm
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : null}
       </main>
 
       <aside className="pane pane-right">

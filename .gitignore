@@ -14,3 +14,6 @@ apps/**/.vite/
 ### Python caches
 __pycache__/
 *.py[cod]
+### Codex temp
+.codex_tmp/
+.codex_tmp/**

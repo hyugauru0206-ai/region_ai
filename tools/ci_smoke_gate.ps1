@@ -15,6 +15,7 @@ $uiBuildSmokeScript = Join-Path $repoRoot "tools/ui_build_smoke.ps1"
 $desktopSmokeScript = Join-Path $repoRoot "tools/desktop_smoke.ps1"
 $docsCheckScript = Join-Path $repoRoot "tools/docs_check.ps1"
 $smokeScript = Join-Path $repoRoot "tools/ci_smoke.ps1"
+$repoSanityScript = Join-Path $repoRoot "tools/repo_sanity.ps1"
 $logsRoot = Join-Path $repoRoot "data\\logs"
 $runId = "ci_smoke_gate_" + (Get-Date -Format "yyyyMMdd_HHmmss_fff")
 $runLogDir = Join-Path $logsRoot $runId
@@ -199,6 +200,7 @@ Write-ProgressLine ("run_id=" + $runId + " step_timeout_sec=" + $stepTimeoutSec 
 $result = [ordered]@{
   action = "ci_smoke_gate"
   gate_required = $true
+  repo_sanity_ok = $false
   gate_passed = $false
   whiteboard_passed = $false
   recipes_passed = $false
@@ -252,6 +254,18 @@ function Throw-StepFailure {
 
 try {
   if ((Get-Date) -ge $globalDeadline) { throw "global_timeout" }
+
+  $step = Invoke-StepScript -StepName "repo_sanity" -ScriptPath $repoSanityScript -ScriptArgs @("-Json", "-StrictGit") -GlobalDeadline $globalDeadline -StepTimeoutSec $stepTimeoutSec -LogsDir $runLogDir
+  Register-StepResult -ResultObj $result -StepObj $step
+  if ($step.exit_code -ne 0 -or $step.timed_out -or $step.global_timed_out) {
+    Throw-StepFailure -ResultObj $result -StepObj $step -Reason "repo_sanity_failed"
+  }
+  $sanityObj = Try-ParseLastJsonLine -Lines $step.lines
+  if (-not $sanityObj -or -not [bool]$sanityObj.ok) {
+    Throw-StepFailure -ResultObj $result -StepObj $step -Reason "repo_sanity_not_ok"
+  }
+  $result.repo_sanity_ok = $true
+  $result.last_completed_step = "repo_sanity"
 
   $step = Invoke-StepScript -StepName "design_gate" -ScriptPath $gateScript -GlobalDeadline $globalDeadline -StepTimeoutSec $stepTimeoutSec -LogsDir $runLogDir
   Register-StepResult -ResultObj $result -StepObj $step
@@ -386,7 +400,7 @@ catch {
   }
 }
 
-$result.exit_code = if ($result.gate_passed -and $result.whiteboard_passed -and $result.recipes_passed -and $result.contract_index_passed -and $result.ui_build_passed -and $result.ui_passed -and $result.desktop_passed -and $result.docs_check_ok -and $result.smoke_ok) { 0 } else { 1 }
+$result.exit_code = if ($result.repo_sanity_ok -and $result.gate_passed -and $result.whiteboard_passed -and $result.recipes_passed -and $result.contract_index_passed -and $result.ui_build_passed -and $result.ui_passed -and $result.desktop_passed -and $result.docs_check_ok -and $result.smoke_ok) { 0 } else { 1 }
 
 if ($Json) {
   [Console]::Out.WriteLine(($result | ConvertTo-Json -Compress -Depth 6))

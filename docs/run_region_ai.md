@@ -30,6 +30,40 @@
 - Round label rule: use `Round1 (negative / parallel contention reproduction)` when intentionally reproducing contention.
 - Operation rule: do not run `ci:smoke:gate` and `e2e:auto:dev` in parallel (workspace/lock contention); if parallel is required, use isolated workspace mode (see `## Concurrency rule`).
 
+## 普段の開発ゲート
+1. `npm.cmd run docs:check:json`
+2. `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Json`
+3. `node tools/ci_smoke_gate_runner.cjs`
+
+## Git不要の公開フロー（bundle経由）
+- 正式手順の入口は `tools/publish.ps1` のみを使う（内部で `publish_*` を呼ぶ）。
+- `artifacts/` と `data/` 配下の実行記録は運用ログとして保持し、repo には commit しない（`.gitignore` 管理）。
+- A) オフライン端末で bundle 作成（repo root）
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/publish.ps1 -Mode export -Json`
+  - 最終行JSONの `bundle` を控える。
+- B) 443到達可能端末で dry-run プレビュー（pushしない）
+  - `$RepoUrl = "https://github.com/hyugauru0206-ai/region_ai.git"`
+  - `$BundlePath = "C:\work\region_ai\artifacts\push_export_YYYYMMDD_HHmmss\region_ai_head.bundle"`
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/publish.ps1 -Mode from_bundle -RepoUrl $RepoUrl -BundlePath $BundlePath -BranchName from_bundle -RemoteBranch main -DryRun -Json`
+- C) 問題なければ push 実行
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/publish.ps1 -Mode from_bundle -RepoUrl $RepoUrl -BundlePath $BundlePath -BranchName from_bundle -RemoteBranch main -ConfirmPhrase "PUSH" -Json`
+- 補足（実装上の正規ref）:
+  - `git fetch "<bundle>" "HEAD:refs/heads/<branch>"` を使用する。
+  - **`git fetch "<bundle>" "HEAD:refs/heads/<branch>"` が正。`bundle/HEAD` は使わない。**
+- ハング回避:
+  - gate再実行は `node tools/ci_smoke_gate_runner.cjs` を優先する（PowerShell直呼びより安定）。
+
+## 作業ツリー復旧（安全版）
+- 危険な `git clean -fdx` は通常運用で推奨しない（ignore された生成物まで消すため）。
+- 異常を感じたら最初に実行:
+  - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/repo_sanity.ps1 -Json`
+- 推奨手順:
+  1) `git status --porcelain`
+  2) 追跡ファイルの戻し: `git restore .`
+  3) 未追跡の確認: `git clean -fdn`（dry-run）
+  4) 問題なければ `git clean -fd`（`-x` は基本使わない）
+- `git clean` 実行直後は必ず `tools/repo_sanity.ps1 -Json` を再実行してから smoke/gate/publish を回す。
+
 ## Recipes (Golden templates)
 - Location: `templates/tasks/recipes/`
 - Machine-readable catalog SSOT: `docs/recipes_region_ai.json`

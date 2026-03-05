@@ -941,6 +941,11 @@ const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "members", label: "繝｡繝ｳ繝舌・" },
   { id: "activity", label: "繧｢繧ｯ繝・ぅ繝薙ユ繧｣" },
 ];
+const PRIMARY_NAVS = [
+  { id: "autopilot", label: "Autopilot", icon: "A", description: "Open dashboard autopilot actions" },
+  { id: "dashboard", label: "Dashboard", icon: "D", description: "Open daily loop dashboard" },
+  { id: "workspace", label: "Workspace", icon: "W", description: "Open workspace room" },
+] as const;
 const CHAT_CHANNELS: ChannelId[] = ["general", "codex", "chatgpt", "external"];
 const MEMORY_CATEGORIES: MemoryCategory[] = ["episodes", "knowledge", "procedures"];
 const ORG_AGENT_STATUS_OPTIONS: OrgAgentStatus[] = ["idle", "writing", "researching", "executing", "syncing", "error"];
@@ -1186,6 +1191,8 @@ export function App(): JSX.Element {
   const [status, setStatus] = useState("ready");
   const [toast, setToast] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [pins, setPins] = useState<string[]>([]);
   const [readState, setReadState] = useState<ReadStateMap>({});
@@ -1436,6 +1443,7 @@ export function App(): JSX.Element {
   const trackerHistoryRestoreInflightRef = useRef(false);
   const trackerHistoryRestoreDoneRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
   const chatThreadId = useMemo(() => (CHAT_CHANNELS.includes(activeChannel) ? activeChannel : "general"), [activeChannel]);
   const currentArtifacts: string[] = selectedRunDetail?.artifacts?.files || [];
@@ -2707,6 +2715,23 @@ export function App(): JSX.Element {
       return;
     }
     ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  function openPrimaryAutopilot(): void {
+    setDashboardQuickActionFocusId("morning_brief_autopilot_start");
+    setActiveChannel("dashboard");
+    scrollDashboardCard(dashboardQuickActionsCardRef);
+    setStatus("navigate:autopilot");
+  }
+
+  function openPrimaryDashboard(): void {
+    setActiveChannel("dashboard");
+    setStatus("navigate:dashboard");
+  }
+
+  function openPrimaryWorkspace(): void {
+    setActiveChannel("workspace");
+    setStatus("navigate:workspace");
   }
 
   function openDashboardNextActionThread(threadKeyInput: string): void {
@@ -4238,12 +4263,23 @@ export function App(): JSX.Element {
     const onKey = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
         e.preventDefault();
-        searchInputRef.current?.focus();
+        setCommandPaletteOpen(true);
+        setCommandPaletteQuery("");
+      }
+      if (e.key === "Escape" && commandPaletteOpen) {
+        setCommandPaletteOpen(false);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [commandPaletteOpen]);
+
+  useEffect(() => {
+    if (!commandPaletteOpen) return;
+    window.setTimeout(() => {
+      commandPaletteInputRef.current?.focus();
+    }, 10);
+  }, [commandPaletteOpen]);
 
   useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
@@ -4635,6 +4671,43 @@ export function App(): JSX.Element {
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
   const selectedCharacterSheetAgent = orgAgents.find((x) => x.id === characterSheetAgentId) || null;
+  const commandPaletteItems = useMemo(() => {
+    const rows: Array<{ id: string; title: string; subtitle: string; run: () => void }> = [
+      {
+        id: "autopilot",
+        title: "Autopilot",
+        subtitle: "Open dashboard autopilot actions",
+        run: () => openPrimaryAutopilot(),
+      },
+      {
+        id: "dashboard",
+        title: "Dashboard",
+        subtitle: "Open daily loop dashboard",
+        run: () => openPrimaryDashboard(),
+      },
+      {
+        id: "workspace",
+        title: "Workspace",
+        subtitle: "Open workspace room",
+        run: () => openPrimaryWorkspace(),
+      },
+    ];
+    const reopenTarget = String(characterSheetAgentId || characterSheetLastAgentId || "").trim();
+    if (reopenTarget) {
+      rows.push({
+        id: "character_sheet",
+        title: "Open Character Sheet",
+        subtitle: "Reopen right-pane sheet for the latest agent",
+        run: () => openCharacterSheet(reopenTarget),
+      });
+    }
+    return rows;
+  }, [characterSheetAgentId, characterSheetLastAgentId]);
+  const commandPaletteFiltered = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    if (!q) return commandPaletteItems;
+    return commandPaletteItems.filter((it) => `${it.title} ${it.subtitle}`.toLowerCase().includes(q));
+  }, [commandPaletteItems, commandPaletteQuery]);
   const characterSheetMemoryItems = [
     ...characterSheetMemoryEpisodes,
     ...(characterSheetIncludeDerivedMemory ? characterSheetMemoryKnowledge : []),
@@ -4722,6 +4795,28 @@ export function App(): JSX.Element {
     <div className="app-root">
       <aside className="pane pane-left">
         <div className="brand">region_ai hub</div>
+        <div className="section-title">Primary</div>
+        <nav className="primary-nav">
+          {PRIMARY_NAVS.map((item) => {
+            const isAutopilotActive = activeChannel === "dashboard" && dashboardQuickActionFocusId === "morning_brief_autopilot_start";
+            const isActive = item.id === "autopilot"
+              ? isAutopilotActive
+              : item.id === "dashboard"
+                ? (activeChannel === "dashboard" && !isAutopilotActive)
+                : activeChannel === "workspace";
+            const onClick = item.id === "autopilot"
+              ? openPrimaryAutopilot
+              : item.id === "dashboard"
+                ? openPrimaryDashboard
+                : openPrimaryWorkspace;
+            return (
+              <button key={item.id} className={`primary-btn ${isActive ? "active" : ""}`} onClick={onClick} type="button" title={item.description}>
+                <span className="primary-icon">{item.icon}</span>
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
         <div className="section-title">Channels</div>
         <nav className="channel-list">
           {CHANNELS.map((c) => (
@@ -4736,10 +4831,11 @@ export function App(): JSX.Element {
       </aside>
 
       <main className="pane pane-main">
-        <div className="top-bar">
+        <div className="top-bar so-panel">
           <div className="channel-title">#{activeChannel}</div>
           <div className="search-wrap">
-            <input ref={searchInputRef} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="Search (Ctrl+K)" />
+            <input ref={searchInputRef} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void runSearch(); }} placeholder="Search (Enter) / Palette Ctrl+K" />
+            <button type="button" onClick={() => { setCommandPaletteOpen(true); setCommandPaletteQuery(""); }} title="Open command palette">⌘K</button>
             <button type="button" onClick={() => void runSearch()}>Search</button>
           </div>
           <div className="bus">
@@ -4756,9 +4852,9 @@ export function App(): JSX.Element {
         {CHAT_CHANNELS.includes(activeChannel) && (
           <>
             <div className="thread-hint">thread: {chatThreadId}</div>
-            <div className="timeline">
+            <div className="timeline so-panel">
               {messages.map((m) => (
-                <div key={m.id} className="msg-row" onClick={() => setSelectedMessage(m)}>
+                <div key={m.id} className="msg-row so-card" onClick={() => setSelectedMessage(m)}>
                   <div className="avatar" style={{ backgroundColor: roleColor(m.role) }}>{roleInitial(m.role)}</div>
                   <div className="msg-content">
                     <div className="msg-meta">
@@ -4784,7 +4880,7 @@ export function App(): JSX.Element {
               ))}
               {!messages.length ? <div className="empty">No messages</div> : null}
             </div>
-            <form className="composer" onSubmit={(e) => { void sendMessage(e); }}>
+            <form className="composer so-panel" onSubmit={(e) => { void sendMessage(e); }}>
               <textarea value={composerText} onChange={(e) => setComposerText(e.target.value)} placeholder="message" rows={5} />
               <div className="composer-actions">
                 <select value={clipboardRole} onChange={(e) => setClipboardRole(e.target.value)}>
@@ -5556,7 +5652,7 @@ export function App(): JSX.Element {
                     <div className="workspace-office-line">state route: {agent.status} → {stateZoneLabel(agent.status)}</div>
                     <div className="workspace-office-line">office desk: {agent.assigned_thread_id ? `thread/${agent.assigned_thread_id}` : "unassigned"}</div>
                     <div className="workspace-actions" onPointerDown={(e) => e.stopPropagation()}>
-                      <button type="button" onClick={() => openCharacterSheet(agent.id)}>ステータス</button>
+                      <button type="button" title="Open right pane Character Sheet" onClick={() => openCharacterSheet(agent.id)}>キャラシート</button>
                       <button type="button" onClick={() => focusDesktopRole(agent)}>ChatGPTへフォーカス</button>
                       <button type="button" onClick={() => openAgentMemory(agent.id, "episodes")}>Memory</button>
                       <button type="button" onClick={() => void runWorkspaceHeartbeat(agent)}>Heartbeat</button>
@@ -5640,7 +5736,7 @@ export function App(): JSX.Element {
                     <small className="wrapAnywhere">thread={agent.assigned_thread_id || "-"}</small>
                     <div className="composer-actions">
                       <button type="button" onClick={() => setSelectedAgentId(agent.id)}>編集</button>
-                      <button type="button" onClick={() => openCharacterSheet(agent.id)}>ステータス</button>
+                      <button type="button" title="Open right pane Character Sheet" onClick={() => openCharacterSheet(agent.id)}>キャラシート</button>
                     </div>
                   </div>
                 ))}
@@ -6507,20 +6603,25 @@ export function App(): JSX.Element {
 
       <aside className="pane pane-right">
         <div className="section-title">Context</div>
-        <section className="character-sheet-panel raPanel">
-          <div className="row-head">
-            <strong>キャラシート</strong>
+        <section className="character-sheet-panel raPanel so-panel">
+          <div className="so-header">
+            <div>
+              <strong>Character Sheet</strong>
+              <div className="so-muted">Right pane / StarOffice panel</div>
+            </div>
             <div className="composer-actions">
               {characterSheetLastAgentId && !characterSheetAgentId ? (
-                <button type="button" onClick={() => openCharacterSheet(characterSheetLastAgentId)}>Reopen last</button>
+                <button type="button" title="Reopen last sheet" onClick={() => openCharacterSheet(characterSheetLastAgentId)}>↺</button>
               ) : null}
-              {characterSheetAgentId ? <button type="button" onClick={() => closeCharacterSheet()}>Close</button> : null}
+              {characterSheetAgentId ? (
+                <button type="button" title="Edit in members" onClick={() => { setActiveChannel("members"); setSelectedAgentId(characterSheetAgentId); }}>✎</button>
+              ) : null}
+              {characterSheetAgentId ? <button type="button" title="Close sheet" onClick={() => closeCharacterSheet()}>✕</button> : null}
             </div>
           </div>
           {selectedCharacterSheetAgent ? (
             <div className="character-sheet-body">
-              <div className="character-sheet-group sheet-top">
-              <div className="character-sheet-card">
+              <div className="character-sheet-card so-card">
                 <div className="character-sheet-header">
                   <div className="character-sheet-title">{selectedCharacterSheetAgent.icon} {selectedCharacterSheetAgent.display_name}</div>
                   <span className={`workspace-status-badge status-${selectedCharacterSheetAgent.status}`}>{selectedCharacterSheetAgent.status}</span>
@@ -6537,57 +6638,10 @@ export function App(): JSX.Element {
                   <span className="raKvKey">agent_id</span>
                   <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.id}</code>
                 </div>
-                <div className="composer-actions">
-                  {selectedCharacterSheetAgent.assigned_thread_id ? (
-                    <button type="button" onClick={() => jumpToThread(String(selectedCharacterSheetAgent.assigned_thread_id || ""))}>Go to thread</button>
-                  ) : null}
-                  <button type="button" onClick={() => openAgentMemory(selectedCharacterSheetAgent.id, "episodes")}>Open Memory</button>
-                  {selectedCharacterSheetAgent.thread_key ? (
-                    <button type="button" onClick={() => openCharacterSheetInboxThread(selectedCharacterSheetAgent)}>Go to #inbox thread</button>
-                  ) : null}
-                  <button type="button" onClick={() => void navigator.clipboard.writeText(selectedCharacterSheetAgent.id)}>Copy agent_id</button>
-                </div>
               </div>
 
-              <div className="character-sheet-card">
-                <div className="row-head"><strong>Identity / Traits</strong></div>
-                <ul className="character-sheet-list">
-                  {[
-                    selectedCharacterSheetAgent.identity?.tagline,
-                    selectedCharacterSheetAgent.identity?.focus ? `Focus: ${selectedCharacterSheetAgent.identity?.focus}` : "",
-                    selectedCharacterSheetAgent.identity?.speaking_style ? `Style: ${selectedCharacterSheetAgent.identity?.speaking_style}` : "",
-                    ...(selectedCharacterSheetAgent.identity?.values || []).map((v) => `Value: ${v}`),
-                    ...(selectedCharacterSheetAgent.identity?.strengths || []).map((v) => `Strength: ${v}`),
-                    ...(selectedCharacterSheetAgent.identity?.weaknesses || []).map((v) => `Weakness: ${v}`),
-                  ].filter((x) => !!String(x || "").trim()).slice(0, 6).map((row, idx) => (
-                    <li key={`trait_${idx}`} className="raWrapAnywhere">{String(row || "")}</li>
-                  ))}
-                </ul>
-                {!(selectedCharacterSheetAgent.identity?.tagline || (selectedCharacterSheetAgent.identity?.values || []).length || (selectedCharacterSheetAgent.identity?.strengths || []).length || (selectedCharacterSheetAgent.identity?.weaknesses || []).length) ? (
-                  <div className="empty">No identity traits yet</div>
-                ) : null}
-                <div className="raKvRow">
-                  <span className="raKvKey">Active Profile</span>
-                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.active_preset_set_id || activeProfileState?.preset_set_id || "-"}</code>
-                </div>
-                <div className="raKvRow">
-                  <span className="raKvKey">Recommended</span>
-                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.recommended_preset_set_id || "-"}</code>
-                </div>
-                <div className="raKvRow">
-                  <span className="raKvKey">Target</span>
-                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.target_preset_set_id || "-"}</code>
-                </div>
-                <div className="composer-actions">
-                  <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId(selectedCharacterSheetAgent.id); }}>Open #members edit</button>
-                  <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId(selectedCharacterSheetAgent.id); }}>Apply preset</button>
-                </div>
-              </div>
-              </div>
-
-              <div className="character-sheet-group sheet-mid">
-              <div className="character-sheet-card">
-                <div className="row-head"><strong>Memory snapshot</strong></div>
+              <div className="character-sheet-card so-card">
+                <div className="row-head"><strong>Memory</strong></div>
                 <label><input type="checkbox" checked={characterSheetIncludeDerivedMemory} onChange={(e) => setCharacterSheetIncludeDerivedMemory(e.target.checked)} /> include knowledge/procedures</label>
                 <div className="composer-actions">
                   <button type="button" onClick={() => void refreshCharacterSheetMemory(selectedCharacterSheetAgent.id)}>Reload</button>
@@ -6605,10 +6659,41 @@ export function App(): JSX.Element {
                 </div>
               </div>
 
-              <div className="character-sheet-card">
+              <div className="character-sheet-card so-card">
+                <div className="row-head"><strong>Tools</strong></div>
+                <div className="composer-actions">
+                  {selectedCharacterSheetAgent.assigned_thread_id ? (
+                    <button type="button" onClick={() => jumpToThread(String(selectedCharacterSheetAgent.assigned_thread_id || ""))}>Go to thread</button>
+                  ) : null}
+                  {selectedCharacterSheetAgent.thread_key ? (
+                    <button type="button" onClick={() => openCharacterSheetInboxThread(selectedCharacterSheetAgent)}>Open #inbox thread</button>
+                  ) : null}
+                  <button type="button" onClick={() => void runHeartbeat(true, { agentId: selectedCharacterSheetAgent.id, category: "episodes" })}>Heartbeat (dry-run)</button>
+                  <button type="button" onClick={() => void runCharacterSheetHeartbeatNow(selectedCharacterSheetAgent.id, false)}>Run now</button>
+                </div>
+                {heartbeatResult ? <pre className="jsonOutput raMonoBox raWrapAnywhere">{JSON.stringify(heartbeatResult, null, 2)}</pre> : null}
+              </div>
+
+              <div className="character-sheet-card so-card">
                 <div className="row-head">
-                  <strong>Live activity</strong>
+                  <strong>Notes</strong>
                   <small>mode={characterSheetActivityStatus}</small>
+                </div>
+                <ul className="character-sheet-list">
+                  {[
+                    selectedCharacterSheetAgent.identity?.tagline,
+                    selectedCharacterSheetAgent.identity?.focus ? `Focus: ${selectedCharacterSheetAgent.identity?.focus}` : "",
+                    selectedCharacterSheetAgent.identity?.speaking_style ? `Style: ${selectedCharacterSheetAgent.identity?.speaking_style}` : "",
+                    ...(selectedCharacterSheetAgent.identity?.values || []).map((v) => `Value: ${v}`),
+                    ...(selectedCharacterSheetAgent.identity?.strengths || []).map((v) => `Strength: ${v}`),
+                    ...(selectedCharacterSheetAgent.identity?.weaknesses || []).map((v) => `Weakness: ${v}`),
+                  ].filter((x) => !!String(x || "").trim()).slice(0, 6).map((row, idx) => (
+                    <li key={`trait_${idx}`} className="raWrapAnywhere">{String(row || "")}</li>
+                  ))}
+                </ul>
+                <div className="raKvRow">
+                  <span className="raKvKey">Active Profile</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{selectedCharacterSheetAgent.active_preset_set_id || activeProfileState?.preset_set_id || "-"}</code>
                 </div>
                 <div className="list">
                   {characterSheetLiveActivity.map((item) => (
@@ -6620,21 +6705,6 @@ export function App(): JSX.Element {
                   ))}
                   {!characterSheetLiveActivity.length ? <div className="empty">No live activity for this agent yet</div> : null}
                 </div>
-              </div>
-              </div>
-
-              <div className="character-sheet-group sheet-bottom">
-              <div className="character-sheet-card">
-                <div className="row-head"><strong>Ops shortcuts</strong></div>
-                <div className="composer-actions">
-                  <button type="button" onClick={() => void runHeartbeat(true, { agentId: selectedCharacterSheetAgent.id, category: "episodes" })}>Heartbeat (dry-run)</button>
-                  <button type="button" onClick={() => void runCharacterSheetHeartbeatNow(selectedCharacterSheetAgent.id, false)}>Run now</button>
-                  {selectedCharacterSheetAgent.thread_key ? (
-                    <button type="button" onClick={() => openCharacterSheetInboxThread(selectedCharacterSheetAgent)}>Open #inbox thread</button>
-                  ) : null}
-                </div>
-                {heartbeatResult ? <pre className="jsonOutput raMonoBox raWrapAnywhere">{JSON.stringify(heartbeatResult, null, 2)}</pre> : null}
-              </div>
               </div>
             </div>
           ) : (
@@ -6791,6 +6861,40 @@ export function App(): JSX.Element {
           </div>
         </section>
       </aside>
+
+      {commandPaletteOpen ? (
+        <div className="commandPaletteOverlay" onClick={() => setCommandPaletteOpen(false)}>
+          <div className="commandPalette" onClick={(e) => e.stopPropagation()}>
+            <div className="so-header">
+              <strong>Command Palette</strong>
+              <span className="so-kbd">Ctrl+K</span>
+            </div>
+            <input
+              ref={commandPaletteInputRef}
+              value={commandPaletteQuery}
+              placeholder="autopilot / dashboard / workspace / character sheet"
+              onChange={(e) => setCommandPaletteQuery(e.target.value)}
+            />
+            <div className="list">
+              {commandPaletteFiltered.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="list-item so-card"
+                  onClick={() => {
+                    setCommandPaletteOpen(false);
+                    item.run();
+                  }}
+                >
+                  <div>{item.title}</div>
+                  <small>{item.subtitle}</small>
+                </button>
+              ))}
+              {!commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

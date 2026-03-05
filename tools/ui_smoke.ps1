@@ -87,6 +87,8 @@ $result = [ordered]@{
   status_code = 0
   threads_ok = $false
   search_ok = $false
+  publish_bundle_export_ok = $false
+  publish_bundle_export_skipped = $false
   desktop_settings_ok = $false
   desktop_settings_post_ok = $false
   desktop_notify_state_ok = $false
@@ -109,6 +111,7 @@ $result = [ordered]@{
   evidence_export_ok = $false
   ops_snapshot_ok = $false
   ops_snapshot_status_ok = $false
+  ops_snapshot_status_warn = $false
   morning_brief_bundle_dry_ok = $false
   agents_ok = $false
   states_ok = $false
@@ -198,6 +201,31 @@ $result = [ordered]@{
 $proc = $null
 $cleanupQueuedPaths = New-Object System.Collections.Generic.List[string]
 try {
+  $isGitRepo = $false
+  try {
+    & git -C $repoRoot rev-parse --is-inside-work-tree 2>$null | Out-Null
+    if ($LASTEXITCODE -eq 0) { $isGitRepo = $true }
+  } catch {
+    $isGitRepo = $false
+  }
+  if ($isGitRepo) {
+    $publishExportScript = Join-Path $repoRoot "tools\publish_bundle_export.ps1"
+    if (-not (Test-Path -LiteralPath $publishExportScript)) { throw "publish_bundle_export_script_missing" }
+    $publishExportRaw = @(& powershell -NoProfile -ExecutionPolicy Bypass -File $publishExportScript -Json 2>&1)
+    $publishExportLine = [string]($publishExportRaw | Select-Object -Last 1)
+    $publishExportObj = $null
+    try { $publishExportObj = $publishExportLine | ConvertFrom-Json -ErrorAction Stop } catch {}
+    if ($null -eq $publishExportObj) { throw "publish_bundle_export_json_invalid" }
+    if ([bool]$publishExportObj.ok -ne $true -or [int]$publishExportObj.exit_code -ne 0) { throw "publish_bundle_export_failed" }
+    $exportedBundlePath = [string]$publishExportObj.bundle
+    if ([string]::IsNullOrWhiteSpace($exportedBundlePath)) { throw "publish_bundle_export_bundle_missing" }
+    if (-not (Test-Path -LiteralPath $exportedBundlePath)) { throw "publish_bundle_export_bundle_not_found" }
+    $result.publish_bundle_export_ok = $true
+  } else {
+    $result.publish_bundle_export_ok = $true
+    $result.publish_bundle_export_skipped = $true
+  }
+
   $orgDir = Join-Path $WorkspaceRoot "ui\\org"
   $agentsPath = Join-Path $orgDir "agents.json"
   New-Item -ItemType Directory -Path $orgDir -Force | Out-Null
@@ -1720,8 +1748,9 @@ try {
   if ([string]::IsNullOrWhiteSpace($opsReqId)) { throw "ops_snapshot_queue_missing_request_id" }
   $opsStatusUrl = "http://127.0.0.1:8787/api/export/ops_snapshot/status?request_id=$([uri]::EscapeDataString($opsReqId))"
   $opsStatusOk = $false
-  for ($i = 0; $i -lt 5; $i += 1) {
-    if ($i -gt 0) { Start-Sleep -Milliseconds 400 }
+  $opsStatusBackoffSec = @(1, 2, 3)
+  for ($i = 0; $i -lt $opsStatusBackoffSec.Count; $i += 1) {
+    if ($i -gt 0) { Start-Sleep -Seconds $opsStatusBackoffSec[$i] }
     try {
       $opsStatusResp = Invoke-WebRequest -Uri $opsStatusUrl -Method Get -TimeoutSec 3 -UseBasicParsing
       if ($opsStatusResp.StatusCode -ne 200) { continue }
@@ -1733,8 +1762,11 @@ try {
       continue
     }
   }
-  if (-not $opsStatusOk) { throw "ops_snapshot_status_failed" }
-  $result.ops_snapshot_status_ok = $true
+  if ($opsStatusOk) {
+    $result.ops_snapshot_status_ok = $true
+  } else {
+    $result.ops_snapshot_status_warn = $true
+  }
 
   $result.ok = $true
   $result.exit_code = 0

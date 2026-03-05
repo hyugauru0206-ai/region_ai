@@ -1,13 +1,16 @@
-﻿node_modules/
-dist/
+tools/push_from_bundle_v3.ps1
 artifacts/
 data/
 workspace/
 workspace_user*/
-*.log
-*.pid
-*.zip
-*.bundle
-*.patch
+apps/**/node_modules/
+apps/**/dist/
+apps/**/.vite/
+**/*.tsbuildinfo
+**/*.log
+**/*.zip
+**/.DS_Store
+
+### Python caches
 __pycache__/
-*.pyc
+*.py[cod]

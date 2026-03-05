@@ -17,7 +17,9 @@
     "region_ai:stop": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\stop_region_ai.ps1",
     "region_ai:status": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1",
     "region_ai:status:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1 -Json",
-    "region_ai:status:json:check": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1 -Json | python -c \"import sys,json; json.loads(sys.stdin.read()); print('OK')\""
+    "region_ai:status:json:check": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\status_region_ai.ps1 -Json | python -c \"import sys,json; json.loads(sys.stdin.read()); print('OK')\"",
+    "publish:bundle:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\publish_bundle_export.ps1 -Json",
+    "publish:from-bundle:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& .\\tools\\publish_from_bundle.ps1 -RepoUrl $env:REGION_AI_REPO_URL -BundlePath $env:REGION_AI_BUNDLE_PATH -DryRun\""
   }
 }
 

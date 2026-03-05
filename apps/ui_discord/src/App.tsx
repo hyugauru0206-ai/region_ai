@@ -1,6 +1,6 @@
 ﻿import { FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-type ChannelId = "general" | "codex" | "chatgpt" | "external" | "runs" | "recipes" | "designs" | "settings" | "inbox" | "drafts" | "members" | "activity" | "workspace" | "dashboard";
+type ChannelId = "general" | "codex" | "chatgpt" | "external" | "runs" | "recipes" | "designs" | "settings" | "inbox" | "drafts" | "members" | "activity" | "workspace" | "dashboard" | "office" | "debate";
 type Thread = { id: string; title: string; updated_at: string };
 type ChatLinks = { run_id?: string; design_id?: string; artifact_paths?: string[]; source?: string; suggestion_id?: string; autopilot_run_id?: string };
 type ChatMessage = {
@@ -938,6 +938,8 @@ const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "drafts", label: "drafts" },
   { id: "workspace", label: "\u30ef\u30fc\u30af\u30b9\u30da\u30fc\u30b9" },
   { id: "dashboard", label: "ダッシュボード" },
+  { id: "office", label: "office" },
+  { id: "debate", label: "debate" },
   { id: "members", label: "繝｡繝ｳ繝舌・" },
   { id: "activity", label: "繧｢繧ｯ繝・ぅ繝薙ユ繧｣" },
 ];
@@ -2732,6 +2734,16 @@ export function App(): JSX.Element {
   function openPrimaryWorkspace(): void {
     setActiveChannel("workspace");
     setStatus("navigate:workspace");
+  }
+
+  function openPrimaryOffice(): void {
+    setActiveChannel("office");
+    setStatus("navigate:office");
+  }
+
+  function openPrimaryDebate(): void {
+    setActiveChannel("debate");
+    setStatus("navigate:debate");
   }
 
   function openDashboardNextActionThread(threadKeyInput: string): void {
@@ -4691,6 +4703,18 @@ export function App(): JSX.Element {
         subtitle: "Open workspace room",
         run: () => openPrimaryWorkspace(),
       },
+      {
+        id: "office",
+        title: "Office",
+        subtitle: "Open control room office view",
+        run: () => openPrimaryOffice(),
+      },
+      {
+        id: "debate",
+        title: "Debate",
+        subtitle: "Open discussion stage view",
+        run: () => openPrimaryDebate(),
+      },
     ];
     const reopenTarget = String(characterSheetAgentId || characterSheetLastAgentId || "").trim();
     if (reopenTarget) {
@@ -4733,6 +4757,12 @@ export function App(): JSX.Element {
     return ax - bx;
   });
   const orderedGuests = [...orgGuests].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
+  const debateBubbles: Array<{ role: string; agentId: string; text: string }> = [
+    { role: "司会", agentId: "facilitator", text: "司会: data not available" },
+    { role: "批判役", agentId: "designer", text: "批判役: data not available" },
+    { role: "実務", agentId: "implementer", text: "実務: data not available" },
+    { role: "道化師", agentId: "joker", text: "道化師: data not available" },
+  ];
   const workspaceEmptySeatCount = Math.max(0, 6 - (orderedAgents.length + orderedGuests.length));
   const workspaceEmptySeats = Array.from({ length: workspaceEmptySeatCount }, (_, i) => i);
   const workspaceZoneCounts = orderedAgents.reduce<Record<string, number>>((acc, a) => {
@@ -4816,6 +4846,17 @@ export function App(): JSX.Element {
               </button>
             );
           })}
+        </nav>
+        <div className="section-title">Office + Debate</div>
+        <nav className="primary-nav">
+          <button className={`primary-btn ${activeChannel === "office" ? "active" : ""}`} onClick={() => openPrimaryOffice()} type="button" title="Open control room office view">
+            <span className="primary-icon">O</span>
+            <span>Office</span>
+          </button>
+          <button className={`primary-btn ${activeChannel === "debate" ? "active" : ""}`} onClick={() => openPrimaryDebate()} type="button" title="Open discussion stage view">
+            <span className="primary-icon">B</span>
+            <span>Debate</span>
+          </button>
         </nav>
         <div className="section-title">Channels</div>
         <nav className="channel-list">
@@ -5713,6 +5754,101 @@ export function App(): JSX.Element {
                 <div key={`empty-${i}`} className="workspace-empty">empty seat</div>
               ))}
             </div>
+          </div>
+        )}
+
+        {activeChannel === "office" && (
+          <div className="office-root">
+            <section className="so-panel office-control">
+              <div className="so-header">
+                <strong>Control Room</strong>
+                <span className="so-muted">Not available</span>
+              </div>
+              <div className="office-grid">
+                <div className="so-card">
+                  <div className="so-muted">Connection</div>
+                  <div>POLL</div>
+                </div>
+                <div className="so-card">
+                  <div className="so-muted">Run / Queue / Autopilot / Routines</div>
+                  <div className="wrapAnywhere">Not available</div>
+                </div>
+              </div>
+            </section>
+            <section className="so-panel office-canvas">
+              <div className="so-header">
+                <strong>Office Canvas</strong>
+                <span className="so-muted">1-click to Character Sheet</span>
+              </div>
+              <div className="office-seats">
+                {orderedAgents.length < 1 ? <div className="so-card so-muted">No agents</div> : null}
+                {orderedAgents.map((agent) => (
+                  <button key={`office_${agent.id}`} type="button" className={`office-seat so-card status-${agent.status}`} onClick={() => openCharacterSheet(agent.id)}>
+                    <div className="office-seat-head">
+                      <strong>{agent.icon} {agent.display_name}</strong>
+                      <span className={`workspace-status-badge status-${agent.status}`}>{agent.status}</span>
+                    </div>
+                    <div className="so-muted wrapAnywhere">{agent.role}</div>
+                    <div className="so-muted wrapAnywhere">thread: {agent.assigned_thread_id || "-"}</div>
+                  </button>
+                ))}
+              </div>
+            </section>
+            <section className="so-panel office-life">
+              <div className="so-header">
+                <strong>Life Cards</strong>
+                <span className="so-muted">guest / memo / activity</span>
+              </div>
+              <div className="office-grid">
+                <div className="so-card">
+                  <div className="so-muted">Guests</div>
+                  <div>{orderedGuests.length} active</div>
+                </div>
+                <div className="so-card">
+                  <div className="so-muted">Yesterday memo</div>
+                  <div className="so-muted">No data</div>
+                </div>
+                <div className="so-card">
+                  <div className="so-muted">Latest activity</div>
+                  <div className="so-muted">No data</div>
+                </div>
+              </div>
+            </section>
+          </div>
+        )}
+
+        {activeChannel === "debate" && (
+          <div className="debate-root">
+            <section className="so-panel debate-stage">
+              <div className="so-header">
+                <strong>Debate Stage</strong>
+                <span className="so-muted">latest 4-role summary</span>
+              </div>
+              <div className="debate-grid">
+                {debateBubbles.map((row) => (
+                  <article key={`debate_${row.role}`} className="so-card debate-bubble">
+                    <div className="row-head">
+                      <strong>{row.role}</strong>
+                      <button type="button" onClick={() => openCharacterSheet(row.agentId)}>Character Sheet</button>
+                    </div>
+                    <div className="wrapAnywhere">{row.text}</div>
+                  </article>
+                ))}
+              </div>
+            </section>
+            <section className="so-panel">
+              <div className="so-header">
+                <strong>Evidence Links</strong>
+                <span className="so-muted">memory / traits / thread / tracker</span>
+              </div>
+              <div className="composer-actions">
+                <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId("facilitator"); }}>Traits</button>
+                <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
+                <button type="button" disabled>Thread</button>
+                <button type="button" disabled>Tracker/Run</button>
+              </div>
+              <div className="so-muted">data not available</div>
+            </section>
           </div>
         )}
 

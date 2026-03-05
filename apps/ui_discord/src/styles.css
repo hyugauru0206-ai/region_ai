@@ -814,6 +814,50 @@ button:hover {
   padding: 12px;
 }
 
+.office-root,
+.debate-root {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.office-control,
+.office-canvas,
+.office-life,
+.debate-stage {
+  padding: var(--space-3);
+}
+
+.office-grid,
+.debate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-2);
+}
+
+.office-seats {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--space-2);
+}
+
+.office-seat {
+  text-align: left;
+  display: grid;
+  gap: 6px;
+}
+
+.office-seat-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.debate-bubble {
+  display: grid;
+  gap: 8px;
+}
+
 .workspace-toolbar {
   display: flex;
   justify-content: flex-end;

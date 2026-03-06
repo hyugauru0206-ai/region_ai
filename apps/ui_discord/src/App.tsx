@@ -1049,6 +1049,15 @@ function formatCompactTargetId(prefix: string, value: unknown, keep = 8): string
   return `${prefix}:${compact}`;
 }
 
+function buildContextBadge(prefix: string, value: unknown, keep = 8): { label: string; full: string } | null {
+  const full = String(value || "").trim();
+  if (!full) return null;
+  return {
+    label: formatCompactTargetId(prefix, full, keep),
+    full,
+  };
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
@@ -5069,6 +5078,12 @@ export function App(): JSX.Element {
     };
   });
   const activeDebateChain = latestDebateRound ? debateBubbles : [];
+  const debateChainBadges = [
+    buildContextBadge("thr", String(councilThreadKey || latestDebateRound?.thread_key || activeExecutionTracker?.threadKey || "").trim().toLowerCase()),
+    buildContextBadge("run", String(officeRunId || latestDebateRound?.links?.autopilot_run_id || latestDebateRound?.links?.run_id || activeExecutionTracker?.runId || "").trim()),
+    buildContextBadge("trk", String(activeExecutionTracker?.id || activeExecutionTracker?.threadKey || "").trim()),
+    buildContextBadge("mem", String(characterSheetAgentId || "").trim()),
+  ].filter((row): row is { label: string; full: string } => !!row);
   const workspaceEmptySeatCount = Math.max(0, 6 - (orderedAgents.length + orderedGuests.length));
   const workspaceEmptySeats = Array.from({ length: workspaceEmptySeatCount }, (_, i) => i);
   const workspaceZoneCounts = orderedAgents.reduce<Record<string, number>>((acc, a) => {
@@ -6230,6 +6245,13 @@ export function App(): JSX.Element {
                   <strong>Sub-agent chain</strong>
                   <span className="so-muted">lightweight route view</span>
                 </div>
+                {debateChainBadges.length ? (
+                  <div className="composer-actions">
+                    {debateChainBadges.map((badge) => (
+                      <span key={badge.label} className="so-kbd" title={badge.full}>{badge.label}</span>
+                    ))}
+                  </div>
+                ) : null}
                 {activeDebateChain.length ? (
                   <div className="agent-chain-mini-row">
                     {activeDebateChain.map((row, idx) => (

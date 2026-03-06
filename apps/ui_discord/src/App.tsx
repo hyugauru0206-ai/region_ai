@@ -930,6 +930,7 @@ const CHARACTER_SHEET_LAST_AGENT_STORAGE_KEY = "regionai.character_sheet_last_ag
 const TRACKER_HISTORY_EXPORT_SCHEMA_V1 = "regionai.tracker_history.export.v1";
 const UI_THEME_STORAGE_KEY = "regionai.ui.theme.v1";
 const UI_EFFECTS_STORAGE_KEY = "regionai.ui.effects.v1";
+const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -994,6 +995,58 @@ function isTrackerHistoryStatus(value: string): value is ExecutionTrackerHistory
 function isValidInboxThreadKey(value: unknown): boolean {
   const s = String(value || "").trim().toLowerCase();
   return /^[a-z0-9:_-]{1,80}$/.test(s);
+}
+
+function readStoredStringArray(key: string): string[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.map((item) => String(item || "").trim()).filter((item) => !!item);
+  } catch {
+    return [];
+  }
+}
+
+function arraysEqual(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i] !== b[i]) return false;
+  }
+  return true;
+}
+
+function mergeStoredOrder(savedIds: string[], currentIds: string[]): string[] {
+  const allowed = new Set(currentIds);
+  const merged: string[] = [];
+  for (const id of savedIds) {
+    if (!id || !allowed.has(id) || merged.includes(id)) continue;
+    merged.push(id);
+  }
+  for (const id of currentIds) {
+    if (!id || merged.includes(id)) continue;
+    merged.push(id);
+  }
+  return merged;
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number): T[] {
+  if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  if (typeof moved === "undefined") return items;
+  next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function normalizeChainStatus(status: string): "idle" | "writing" | "running" | "error" {
+  if (status === "error") return "error";
+  if (status === "writing") return "writing";
+  if (status === "researching" || status === "executing" || status === "syncing" || status === "polling" || status === "running") {
+    return "running";
+  }
+  return "idle";
 }
 
 function normalizeTrackerHistoryEntry(input: unknown): ExecutionTrackerHistoryItem | null {
@@ -1206,6 +1259,8 @@ export function App(): JSX.Element {
     if (raw === "off" || raw === "fun") return raw;
     return "minimal";
   });
+  const [officeLayoutOrder, setOfficeLayoutOrder] = useState<string[]>(() => readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY));
+  const [officeDragAgentId, setOfficeDragAgentId] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [pins, setPins] = useState<string[]>([]);
   const [readState, setReadState] = useState<ReadStateMap>({});
@@ -4375,6 +4430,24 @@ export function App(): JSX.Element {
   }, [uiEffects]);
 
   useEffect(() => {
+    const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
+    const normalized = mergeStoredOrder(officeLayoutOrder, defaultIds);
+    if (!arraysEqual(officeLayoutOrder, normalized)) {
+      setOfficeLayoutOrder(normalized);
+    }
+  }, [officeLayoutOrder, orgAgents]);
+
+  useEffect(() => {
+    try {
+      if (officeLayoutOrder.length < 1) {
+        localStorage.removeItem(OFFICE_LAYOUT_STORAGE_KEY);
+      } else {
+        localStorage.setItem(OFFICE_LAYOUT_STORAGE_KEY, JSON.stringify(officeLayoutOrder));
+      }
+    } catch {}
+  }, [officeLayoutOrder]);
+
+  useEffect(() => {
     const onMessage = (ev: MessageEvent) => {
       const data = ev.data;
       if (!data || typeof data !== "object") return;
@@ -4478,7 +4551,7 @@ export function App(): JSX.Element {
     const text = await navigator.clipboard.readText();
     if (!text.trim()) return;
     await apiPost(`/api/chat/threads/${chatThreadId}/messages`, {
-  role: string;
+      role: composerRole,
       kind: "note",
       text,
       links: {},
@@ -4546,6 +4619,52 @@ export function App(): JSX.Element {
     setCharacterSheetAgentId("");
     setCharacterSheetLiveActivity([]);
     setCharacterSheetActivityStatus("idle");
+  }
+
+  function reorderOfficeLayoutByIds(dragAgentId: string, targetAgentId: string): void {
+    const dragId = String(dragAgentId || "").trim();
+    const targetId = String(targetAgentId || "").trim();
+    if (!dragId || !targetId || dragId === targetId) return;
+    setOfficeLayoutOrder((prev) => {
+      const currentIds = mergeStoredOrder(prev, orderedAgents.map((agent) => agent.id));
+      const fromIndex = currentIds.indexOf(dragId);
+      const toIndex = currentIds.indexOf(targetId);
+      if (fromIndex < 0 || toIndex < 0) return currentIds;
+      return moveItem(currentIds, fromIndex, toIndex);
+    });
+  }
+
+  function resetOfficeLayout(): void {
+    setOfficeLayoutOrder([]);
+    setOfficeDragAgentId("");
+  }
+
+  function openDebateEvidence(kind: "thread" | "tracker" | "memory", row: {
+    threadKey?: string;
+    runId?: string;
+    memoryAgentId?: string;
+  }): void {
+    if (kind === "thread") {
+      if (!row.threadKey) {
+        showToast("thread_key missing");
+        return;
+      }
+      openTrackerThread(row.threadKey);
+      return;
+    }
+    if (kind === "tracker") {
+      if (!row.runId) {
+        showToast("run_id missing");
+        return;
+      }
+      jumpToRun(row.runId);
+      return;
+    }
+    if (!row.memoryAgentId) {
+      showToast("memory target missing");
+      return;
+    }
+    openCharacterSheet(row.memoryAgentId);
   }
 
   function openCharacterSheetInboxThread(agent: OrgAgent | null): void {
@@ -4828,7 +4947,7 @@ export function App(): JSX.Element {
     return `${x.title || ""} ${x.summary || ""} ${x.actor_id || ""} ${x.event_type || ""}`.toLowerCase().includes(q);
   });
   const workspaceOrder = ["facilitator", "designer", "implementer", "verifier", "joker"];
-  const orderedAgents = [...orgAgents].sort((a, b) => {
+  const defaultOrderedAgents = [...orgAgents].sort((a, b) => {
     const ai = workspaceOrder.indexOf(a.id);
     const bi = workspaceOrder.indexOf(b.id);
     const ax = ai < 0 ? 999 : ai;
@@ -4837,6 +4956,9 @@ export function App(): JSX.Element {
     if (zoneCmp !== 0) return zoneCmp;
     return ax - bx;
   });
+  const orderedAgents = mergeStoredOrder(officeLayoutOrder, defaultOrderedAgents.map((agent) => agent.id))
+    .map((id) => defaultOrderedAgents.find((agent) => agent.id === id))
+    .filter((agent): agent is OrgAgent => !!agent);
   const orderedGuests = [...orgGuests].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
   const officeConnectionMode = dashboardSseConnected ? "LIVE" : (dashboardHeartbeatStatus === "err" ? "DISCONNECTED" : "POLL");
   const officeRunStatus = String(councilStatus?.run?.status || "-");
@@ -4857,12 +4979,39 @@ export function App(): JSX.Element {
     if (line) return line;
     return fallback;
   };
-  const debateBubbles = [
-    { role: "司会", agentId: "facilitator", text: debateBubble("司会:", "司会: data not available") },
-    { role: "批判役", agentId: "designer", text: debateBubble("批判役:", "批判役: data not available") },
-    { role: "実務", agentId: "implementer", text: debateBubble("実務:", "実務: data not available") },
-    { role: "道化師", agentId: "joker", text: debateBubble("道化師:", "道化師: data not available") },
+  const debateRoleSpecs = [
+    { role: "司会", agentId: "facilitator", prefix: "司会:" },
+    { role: "批判役", agentId: "designer", prefix: "批判役:" },
+    { role: "実務", agentId: "implementer", prefix: "実務:" },
+    { role: "道化師", agentId: "joker", prefix: "道化師:" },
   ];
+  const debateBubbles = debateRoleSpecs.map((spec) => {
+    const agent = orgAgents.find((item) => item.id === spec.agentId) || null;
+    const threadKeyCandidates = [
+      String(agent?.thread_key || "").trim().toLowerCase(),
+      String(latestDebateRound?.thread_key || "").trim().toLowerCase(),
+      String(councilThreadKey || councilStatus?.run?.thread_key || "").trim().toLowerCase(),
+      String(activeExecutionTracker?.threadKey || "").trim().toLowerCase(),
+    ];
+    const runIdCandidates = [
+      String(latestDebateRound?.links?.autopilot_run_id || "").trim(),
+      String(latestDebateRound?.links?.run_id || "").trim(),
+      String(officeRunId || "").trim(),
+      String(activeExecutionTracker?.runId || "").trim(),
+    ];
+    const threadKey = threadKeyCandidates.find((item) => isValidInboxThreadKey(item)) || "";
+    const runId = runIdCandidates.find((item) => !!item) || "";
+    return {
+      role: spec.role,
+      agentId: spec.agentId,
+      text: debateBubble(spec.prefix, `${spec.prefix} data not available`),
+      threadKey,
+      runId,
+      memoryAgentId: agent?.id || "",
+      status: normalizeChainStatus(String(agent?.status || (officeRunStatus === "running" ? "running" : "idle"))),
+    };
+  });
+  const activeDebateChain = latestDebateRound ? debateBubbles : [];
   const workspaceEmptySeatCount = Math.max(0, 6 - (orderedAgents.length + orderedGuests.length));
   const workspaceEmptySeats = Array.from({ length: workspaceEmptySeatCount }, (_, i) => i);
   const workspaceZoneCounts = orderedAgents.reduce<Record<string, number>>((acc, a) => {
@@ -5946,12 +6095,38 @@ export function App(): JSX.Element {
             <section className="so-panel office-canvas">
               <div className="so-header">
                 <strong>Office Canvas</strong>
-                <span className="so-muted">1-click to Character Sheet</span>
+                <div className="composer-actions">
+                  <span className="so-muted">drag to reorder seats</span>
+                  <button type="button" onClick={() => resetOfficeLayout()}>Reset layout</button>
+                </div>
               </div>
               <div className="office-seats">
                 {orderedAgents.length < 1 ? <div className="so-card so-muted">No agents</div> : null}
                 {orderedAgents.map((agent) => (
-                  <button key={`office_${agent.id}`} type="button" className={`office-seat so-card status-${agent.status}`} onClick={() => openCharacterSheet(agent.id)}>
+                  <button
+                    key={`office_${agent.id}`}
+                    type="button"
+                    draggable={orderedAgents.length > 1}
+                    className={`office-seat so-card status-${agent.status} ${officeDragAgentId === agent.id ? "is-dragging" : ""}`}
+                    onClick={() => openCharacterSheet(agent.id)}
+                    onDragStart={(ev) => {
+                      ev.dataTransfer.effectAllowed = "move";
+                      ev.dataTransfer.setData("text/plain", agent.id);
+                      setOfficeDragAgentId(agent.id);
+                    }}
+                    onDragOver={(ev) => {
+                      if (!officeDragAgentId || officeDragAgentId === agent.id) return;
+                      ev.preventDefault();
+                      ev.dataTransfer.dropEffect = "move";
+                    }}
+                    onDrop={(ev) => {
+                      ev.preventDefault();
+                      const dragId = ev.dataTransfer.getData("text/plain") || officeDragAgentId;
+                      reorderOfficeLayoutByIds(dragId, agent.id);
+                      setOfficeDragAgentId("");
+                    }}
+                    onDragEnd={() => setOfficeDragAgentId("")}
+                  >
                     <div className="office-seat-head">
                       <strong>{agent.icon} {agent.display_name}</strong>
                       <span className={`workspace-status-badge status-${agent.status}`}>{agent.status}</span>
@@ -5992,6 +6167,25 @@ export function App(): JSX.Element {
                 <strong>Debate Stage</strong>
                 <span className="so-muted">latest 4-role summary</span>
               </div>
+              <div className="agent-chain-mini so-card">
+                <div className="row-head">
+                  <strong>Sub-agent chain</strong>
+                  <span className="so-muted">lightweight route view</span>
+                </div>
+                {activeDebateChain.length ? (
+                  <div className="agent-chain-mini-row">
+                    {activeDebateChain.map((row, idx) => (
+                      <div key={`chain_${row.role}`} className="agent-chain-mini-step">
+                        <span className={`workspace-status-badge status-${row.status}`}>{row.status}</span>
+                        <span>{row.role}</span>
+                        {idx < activeDebateChain.length - 1 ? <span className="agent-chain-arrow">-&gt;</span> : null}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="so-muted">No active chain</div>
+                )}
+              </div>
               <div className="debate-grid">
                 {debateBubbles.map((row) => (
                   <article key={`debate_${row.role}`} className="so-card debate-bubble">
@@ -6000,6 +6194,11 @@ export function App(): JSX.Element {
                       <button type="button" onClick={() => openCharacterSheet(row.agentId)}>Character Sheet</button>
                     </div>
                     <div className="wrapAnywhere">{row.text}</div>
+                    <div className="debate-evidence-links">
+                      <button type="button" disabled={!row.threadKey} onClick={() => openDebateEvidence("thread", row)}>Thread</button>
+                      <button type="button" disabled={!row.runId} onClick={() => openDebateEvidence("tracker", row)}>Tracker</button>
+                      <button type="button" disabled={!row.memoryAgentId} onClick={() => openDebateEvidence("memory", row)}>Memory</button>
+                    </div>
                   </article>
                 ))}
               </div>

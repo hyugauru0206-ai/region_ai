@@ -865,6 +865,40 @@ button:hover {
   gap: 8px;
 }
 
+.office-seat.is-dragging {
+  opacity: 0.58;
+  border-style: dashed;
+}
+
+.debate-evidence-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.agent-chain-mini {
+  display: grid;
+  gap: 10px;
+}
+
+.agent-chain-mini-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.agent-chain-mini-step {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.agent-chain-arrow {
+  color: var(--muted);
+  font-weight: 700;
+}
+
 :root[data-ui-effects="off"] * {
   animation: none !important;
   transition: none !important;
@@ -1048,6 +1082,10 @@ button:hover {
 
 .workspace-status-badge.status-writing {
   background: rgba(61, 161, 101, 0.22);
+}
+
+.workspace-status-badge.status-running {
+  background: rgba(79, 132, 208, 0.22);
 }
 
 .workspace-status-badge.status-researching {

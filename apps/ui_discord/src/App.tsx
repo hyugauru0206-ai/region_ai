@@ -5122,6 +5122,10 @@ export function App(): JSX.Element {
     suggestFailureCount: dailyLoopDashboard?.suggest?.failure_count,
     consolidationResult: dailyLoopDashboard?.consolidation?.facilitator?.last_result,
   });
+  const controlRoomThreadKey = String(councilThreadKey || councilStatus?.run?.thread_key || activeExecutionTracker?.threadKey || "").trim().toLowerCase();
+  const controlRoomTrackerThreadKey = String(activeExecutionTracker?.threadKey || councilThreadKey || councilStatus?.run?.thread_key || "").trim().toLowerCase();
+  const controlRoomIssueRunId = String(controlRoomRecentIssue.badge?.label.startsWith("run:") ? (officeRunId || taskifyTrackingItem?.run_id || activeExecutionTracker?.runId || "") : "").trim();
+  const controlRoomIssueThreadKey = String(controlRoomRecentIssue.badge?.label.startsWith("trk:") || controlRoomRecentIssue.badge?.label.startsWith("thr:") ? controlRoomTrackerThreadKey : "").trim().toLowerCase();
   const latestDebateRound = inboxItems.find((x) => String(x.source || "").trim() === "council_autopilot_round")
     || inboxItems.find((x) => String(x.title || "").toLowerCase().includes("round"));
   const debateBody = String(latestDebateRound?.body || "").trim();
@@ -6189,23 +6193,38 @@ export function App(): JSX.Element {
                   <div className="so-muted">Run</div>
                   <div className="wrapAnywhere">status: {officeRunStatus}</div>
                   <div className="wrapAnywhere">run_id: {officeRunId || "-"}</div>
+                  <div className="composer-actions">
+                    {officeRunId ? <button type="button" onClick={() => jumpToRun(officeRunId)}>Open</button> : null}
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Thread</button> : null}
+                  </div>
                 </div>
                 <div className="so-card">
                   <div className="so-muted">Queue</div>
                   <div className="wrapAnywhere">{officeQueueLabel}</div>
+                  <div className="composer-actions">
+                    {taskifyTrackingItem?.run_id ? <button type="button" onClick={() => jumpToRun(String(taskifyTrackingItem.run_id || ""))}>Open</button> : null}
+                  </div>
                 </div>
                 <div className="so-card">
                   <div className="so-muted">Autopilot</div>
                   <div className="wrapAnywhere">{officeAutopilotLabel}</div>
+                  <div className="composer-actions">
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Open</button> : null}
+                  </div>
                 </div>
                 <div className="so-card">
                   <div className="so-muted">Routines</div>
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
+                  <div className="composer-actions">
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomTrackerThreadKey)}>Tracker</button> : null}
+                  </div>
                 </div>
               </div>
               <div className="so-muted wrapAnywhere" title={controlRoomRecentIssue.detail || controlRoomRecentIssue.text}>
                 {controlRoomRecentIssue.text}
                 {controlRoomRecentIssue.badge ? <span className="so-kbd">{controlRoomRecentIssue.badge.label}</span> : null}
+                {controlRoomIssueRunId ? <button type="button" className="inline-link" onClick={() => jumpToRun(controlRoomIssueRunId)}>Open</button> : null}
+                {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? <button type="button" className="inline-link" onClick={() => openTrackerThread(controlRoomIssueThreadKey)}>Open</button> : null}
               </div>
               <div className="composer-actions">
                 <button

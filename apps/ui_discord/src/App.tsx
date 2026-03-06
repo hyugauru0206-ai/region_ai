@@ -1009,6 +1009,39 @@ function readStoredStringArray(key: string): string[] {
   }
 }
 
+function sanitizeOfficeWorkspaceKey(value: unknown): string {
+  const normalized = String(value || "").trim().replace(/[^A-Za-z0-9_.-]+/g, "_").replace(/^_+|_+$/g, "");
+  return normalized || "default";
+}
+
+function resolveOfficeWorkspaceKey(): string {
+  if (typeof window === "undefined") return "default";
+  const searchParams = new URLSearchParams(window.location.search || "");
+  const bodyDataset = typeof document !== "undefined" ? document.body?.dataset : undefined;
+  const candidates = [
+    searchParams.get("workspace"),
+    searchParams.get("workspace_id"),
+    searchParams.get("workspaceId"),
+    searchParams.get("ws"),
+    bodyDataset?.workspaceId,
+    bodyDataset?.workspaceKey,
+  ];
+  const locationHints = [window.location.hash || "", window.location.pathname || ""];
+  for (const hint of locationHints) {
+    const matched = hint.match(/(?:workspace(?:_id|Id)?=|workspace[/:#-])([A-Za-z0-9_.-]+)/i);
+    if (matched?.[1]) candidates.push(matched[1]);
+  }
+  for (const candidate of candidates) {
+    const sanitized = sanitizeOfficeWorkspaceKey(candidate);
+    if (sanitized !== "default" || String(candidate || "").trim()) return sanitized;
+  }
+  return "default";
+}
+
+function getOfficeLayoutStorageKey(workspaceKey: string): string {
+  return `${OFFICE_LAYOUT_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
@@ -1259,7 +1292,7 @@ export function App(): JSX.Element {
     if (raw === "off" || raw === "fun") return raw;
     return "minimal";
   });
-  const [officeLayoutOrder, setOfficeLayoutOrder] = useState<string[]>(() => readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY));
+  const [officeLayoutOrder, setOfficeLayoutOrder] = useState<string[]>([]);
   const [officeDragAgentId, setOfficeDragAgentId] = useState("");
   const [searchHits, setSearchHits] = useState<SearchHit[]>([]);
   const [pins, setPins] = useState<string[]>([]);
@@ -1516,6 +1549,7 @@ export function App(): JSX.Element {
   const trackerHistorySaveTimerRef = useRef<number | null>(null);
   const trackerHistoryRestoreInflightRef = useRef(false);
   const trackerHistoryRestoreDoneRef = useRef(false);
+  const officeLayoutSkipSaveRef = useRef(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const commandPaletteInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -4431,18 +4465,27 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
-    const normalized = mergeStoredOrder(officeLayoutOrder, defaultIds);
-    if (!arraysEqual(officeLayoutOrder, normalized)) {
-      setOfficeLayoutOrder(normalized);
-    }
-  }, [officeLayoutOrder, orgAgents]);
+    const scopedOrder = readStoredStringArray(officeLayoutStorageKey);
+    const legacyOrder = readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY);
+    const seed = scopedOrder.length > 0 ? scopedOrder : legacyOrder;
+    const normalized = mergeStoredOrder(seed, defaultIds);
+    setOfficeLayoutOrder((prev) => {
+      if (arraysEqual(prev, normalized)) return prev;
+      officeLayoutSkipSaveRef.current = true;
+      return normalized;
+    });
+  }, [officeLayoutStorageKey, orgAgents]);
 
   useEffect(() => {
+    if (officeLayoutSkipSaveRef.current) {
+      officeLayoutSkipSaveRef.current = false;
+      return;
+    }
     try {
       if (officeLayoutOrder.length < 1) {
-        localStorage.removeItem(OFFICE_LAYOUT_STORAGE_KEY);
+        localStorage.removeItem(officeLayoutStorageKey);
       } else {
-        localStorage.setItem(OFFICE_LAYOUT_STORAGE_KEY, JSON.stringify(officeLayoutOrder));
+        localStorage.setItem(officeLayoutStorageKey, JSON.stringify(officeLayoutOrder));
       }
     } catch {}
   }, [officeLayoutOrder]);
@@ -4878,6 +4921,9 @@ export function App(): JSX.Element {
     if (cursor < text.length) parts.push(<span key="tail">{text.slice(cursor)}</span>);
     return <span className="msg-text">{parts.length ? parts : text}</span>;
   }
+
+  const officeWorkspaceKey = resolveOfficeWorkspaceKey();
+  const officeLayoutStorageKey = getOfficeLayoutStorageKey(officeWorkspaceKey);
 
   const filteredRuns = runs.filter((r) => r.run_id.includes(runFilter));
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
@@ -6096,6 +6142,7 @@ export function App(): JSX.Element {
               <div className="so-header">
                 <strong>Office Canvas</strong>
                 <div className="composer-actions">
+                  <span className="so-muted">workspace={officeWorkspaceKey}</span>
                   <span className="so-muted">drag to reorder seats</span>
                   <button type="button" onClick={() => resetOfficeLayout()}>Reset layout</button>
                 </div>

@@ -944,7 +944,7 @@ const TRACKER_HISTORY_EXPORT_SCHEMA_V1 = "regionai.tracker_history.export.v1";
 const UI_THEME_STORAGE_KEY = "regionai.ui.theme.v1";
 const UI_EFFECTS_STORAGE_KEY = "regionai.ui.effects.v1";
 const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
-const COMMAND_PALETTE_RECENT_STORAGE_KEY = "region_ai.command_palette_recent.v1";
+const RECENT_TARGETS_STORAGE_KEY = "region_ai.command_palette_recent.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1025,7 +1025,7 @@ function readStoredStringArray(key: string): string[] {
 
 function readStoredCommandPaletteRecent(): CommandPaletteRecentItem[] {
   try {
-    const raw = localStorage.getItem(COMMAND_PALETTE_RECENT_STORAGE_KEY);
+    const raw = localStorage.getItem(RECENT_TARGETS_STORAGE_KEY);
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -2922,6 +2922,11 @@ export function App(): JSX.Element {
       showToast("thread_key missing");
       return;
     }
+    recordRecentTarget({
+      id: `thread_${key}`,
+      title: `Thread: ${formatCompactTargetId("thr", key)}`,
+      subtitle: "Open current thread in the right pane",
+    });
     setInboxThreadKeyFilter(key);
     setInboxFilter("");
     setActiveChannel("inbox");
@@ -2954,6 +2959,7 @@ export function App(): JSX.Element {
   }
 
   function openPrimaryAutopilot(): void {
+    recordRecentTarget({ id: "autopilot", title: "View: Autopilot", subtitle: "Open dashboard autopilot actions" });
     setDashboardQuickActionFocusId("morning_brief_autopilot_start");
     setActiveChannel("dashboard");
     scrollDashboardCard(dashboardQuickActionsCardRef);
@@ -2961,21 +2967,25 @@ export function App(): JSX.Element {
   }
 
   function openPrimaryDashboard(): void {
+    recordRecentTarget({ id: "dashboard", title: "View: Dashboard", subtitle: "Open daily loop dashboard" });
     setActiveChannel("dashboard");
     setStatus("navigate:dashboard");
   }
 
   function openPrimaryWorkspace(): void {
+    recordRecentTarget({ id: "workspace", title: "View: Workspace", subtitle: "Open workspace room" });
     setActiveChannel("workspace");
     setStatus("navigate:workspace");
   }
 
   function openPrimaryOffice(): void {
+    recordRecentTarget({ id: "office", title: "View: Office", subtitle: "Open control room office view" });
     setActiveChannel("office");
     setStatus("navigate:office");
   }
 
   function openPrimaryDebate(): void {
+    recordRecentTarget({ id: "debate", title: "View: Debate", subtitle: "Open discussion stage view" });
     setActiveChannel("debate");
     setStatus("navigate:debate");
   }
@@ -4593,7 +4603,7 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     try {
-      localStorage.setItem(COMMAND_PALETTE_RECENT_STORAGE_KEY, JSON.stringify(commandPaletteRecent.slice(0, 8)));
+      localStorage.setItem(RECENT_TARGETS_STORAGE_KEY, JSON.stringify(commandPaletteRecent.slice(0, 8)));
     } catch {}
   }, [commandPaletteRecent]);
 
@@ -4752,8 +4762,15 @@ export function App(): JSX.Element {
   }
 
   function jumpToRun(runId: string): void {
+    const id = String(runId || "").trim();
+    if (!id) return;
+    recordRecentTarget({
+      id: `run_${id}`,
+      title: `Run: ${formatCompactTargetId("run", id)}`,
+      subtitle: "Open current operational run",
+    });
     setActiveChannel("runs");
-    setSelectedRunId(runId);
+    setSelectedRunId(id);
   }
 
   function jumpToDesign(designId: string): void {
@@ -4783,6 +4800,12 @@ export function App(): JSX.Element {
   function openCharacterSheet(agentId: string): void {
     const id = String(agentId || "").trim();
     if (!id) return;
+    const agent = orgAgents.find((item) => String(item.id || "").trim() === id) || null;
+    recordRecentTarget({
+      id: `agent_${id}`,
+      title: `Agent: ${agent?.display_name || id}`,
+      subtitle: agent?.role ? `${agent.role} | ${agent.status || "idle"}` : "Open right-pane Character Sheet",
+    });
     setCharacterSheetAgentId(id);
     setCharacterSheetLastAgentId(id);
     try {
@@ -4834,6 +4857,11 @@ export function App(): JSX.Element {
         showToast("run_id missing");
         return;
       }
+      recordRecentTarget({
+        id: `tracker_${row.runId}`,
+        title: `Tracker: ${formatCompactTargetId("trk", row.runId)}`,
+        subtitle: `Open tracked run ${formatCompactTargetId("run", row.runId)}`,
+      });
       jumpToRun(row.runId);
       return;
     }
@@ -5063,7 +5091,7 @@ export function App(): JSX.Element {
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
   const selectedCharacterSheetAgent = orgAgents.find((x) => x.id === characterSheetAgentId) || null;
-  const rememberCommandPaletteItem = (item: CommandPaletteItem): void => {
+  const recordRecentTarget = (item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">): void => {
     setCommandPaletteRecent((prev) => [
       { id: item.id, title: item.title, subtitle: item.subtitle },
       ...prev.filter((row) => row.id !== item.id),
@@ -5148,14 +5176,19 @@ export function App(): JSX.Element {
     const activeTrackerThreadKey = isValidInboxThreadKey(String(activeExecutionTracker?.threadKey || "").trim().toLowerCase())
       ? String(activeExecutionTracker?.threadKey || "").trim().toLowerCase()
       : activeThreadKey;
-    const activeTrackerLabel = String(activeExecutionTracker?.id || activeTrackerThreadKey || "").trim();
     const activeTrackerRunId = String(activeExecutionTracker?.runId || taskifyTrackingItem?.run_id || "").trim();
-    if (activeTrackerLabel && (activeTrackerRunId || activeTrackerThreadKey)) {
+    const activeTrackerRecentKey = String(activeTrackerRunId || activeExecutionTracker?.id || activeTrackerThreadKey || "").trim();
+    if (activeTrackerRecentKey && (activeTrackerRunId || activeTrackerThreadKey)) {
       pushRow({
-        id: `tracker_${activeTrackerLabel}`,
-        title: `Tracker: ${formatCompactTargetId("trk", activeTrackerLabel)}`,
+        id: `tracker_${activeTrackerRecentKey}`,
+        title: `Tracker: ${formatCompactTargetId("trk", activeTrackerRecentKey)}`,
         subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
         run: () => {
+          recordRecentTarget({
+            id: `tracker_${activeTrackerRecentKey}`,
+            title: `Tracker: ${formatCompactTargetId("trk", activeTrackerRecentKey)}`,
+            subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
+          });
           if (activeTrackerRunId) {
             jumpToRun(activeTrackerRunId);
             return;
@@ -6351,7 +6384,7 @@ export function App(): JSX.Element {
                   <div className="so-muted">Routines</div>
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                   <div className="composer-actions">
-                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomTrackerThreadKey)}>Tracker</button> : null}
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => { const trackerRecentKey = String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(); recordRecentTarget({ id: `tracker_${trackerRecentKey}`, title: `Tracker: ${formatCompactTargetId("trk", trackerRecentKey)}`, subtitle: activeExecutionTracker?.runId ? `Open tracked run ${formatCompactTargetId("run", activeExecutionTracker.runId)}` : "Open current tracker thread" }); openTrackerThread(controlRoomTrackerThreadKey); }}>Tracker</button> : null}
                   </div>
                 </div>
               </div>
@@ -6499,7 +6532,14 @@ export function App(): JSX.Element {
                           <button
                             type="button"
                             title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
-                            onClick={() => jumpToRun(officeSeatTrackerRunId)}
+                            onClick={() => {
+                              recordRecentTarget({
+                                id: `tracker_${officeSeatTrackerRunId}`,
+                                title: `Tracker: ${formatCompactTargetId("trk", officeSeatTrackerRunId)}`,
+                                subtitle: `Open tracked run ${formatCompactTargetId("run", officeSeatTrackerRunId)}`,
+                              });
+                              jumpToRun(officeSeatTrackerRunId);
+                            }}
                           >
                             Tracker
                           </button>
@@ -6601,7 +6641,7 @@ export function App(): JSX.Element {
                 <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId("facilitator"); }}>Traits</button>
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
                 <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
-                <button type="button" disabled={!officeRunId} onClick={() => jumpToRun(officeRunId)}>Tracker/Run</button>
+                <button type="button" disabled={!officeRunId} onClick={() => { recordRecentTarget({ id: `tracker_${officeRunId}`, title: `Tracker: ${formatCompactTargetId("trk", officeRunId)}`, subtitle: `Open tracked run ${formatCompactTargetId("run", officeRunId)}` }); jumpToRun(officeRunId); }}>Tracker/Run</button>
               </div>
               <div className="composer-actions">
                 <button
@@ -7820,7 +7860,6 @@ export function App(): JSX.Element {
                     type="button"
                     className="list-item so-card"
                     onClick={() => {
-                      rememberCommandPaletteItem(item);
                       setCommandPaletteOpen(false);
                       item.run();
                     }}
@@ -7838,7 +7877,6 @@ export function App(): JSX.Element {
                   type="button"
                   className="list-item so-card"
                   onClick={() => {
-                    rememberCommandPaletteItem(item);
                     setCommandPaletteOpen(false);
                     item.run();
                   }}

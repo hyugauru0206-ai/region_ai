@@ -38,6 +38,19 @@ type RegionNavigatePayload = {
   mention?: boolean;
 };
 
+type CommandPaletteItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+  run: () => void;
+};
+
+type CommandPaletteRecentItem = {
+  id: string;
+  title: string;
+  subtitle: string;
+};
+
 type ApiResp<T> = { ok: boolean; data: T };
 type DesktopSettings = {
   api_base_url: string;
@@ -931,6 +944,7 @@ const TRACKER_HISTORY_EXPORT_SCHEMA_V1 = "regionai.tracker_history.export.v1";
 const UI_THEME_STORAGE_KEY = "regionai.ui.theme.v1";
 const UI_EFFECTS_STORAGE_KEY = "regionai.ui.effects.v1";
 const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
+const COMMAND_PALETTE_RECENT_STORAGE_KEY = "region_ai.command_palette_recent.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1004,6 +1018,29 @@ function readStoredStringArray(key: string): string[] {
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
     return parsed.map((item) => String(item || "").trim()).filter((item) => !!item);
+  } catch {
+    return [];
+  }
+}
+
+function readStoredCommandPaletteRecent(): CommandPaletteRecentItem[] {
+  try {
+    const raw = localStorage.getItem(COMMAND_PALETTE_RECENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+        const row = item as Record<string, unknown>;
+        const id = String(row.id || "").trim();
+        const title = String(row.title || "").trim();
+        const subtitle = String(row.subtitle || "").trim();
+        if (!id || !title) return null;
+        return { id, title, subtitle };
+      })
+      .filter((item): item is CommandPaletteRecentItem => !!item)
+      .slice(0, 8);
   } catch {
     return [];
   }
@@ -1376,6 +1413,7 @@ export function App(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
+  const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent());
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
   const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
     const raw = String(localStorage.getItem(UI_EFFECTS_STORAGE_KEY) || "").trim();
@@ -4554,6 +4592,12 @@ export function App(): JSX.Element {
   }, [uiEffects]);
 
   useEffect(() => {
+    try {
+      localStorage.setItem(COMMAND_PALETTE_RECENT_STORAGE_KEY, JSON.stringify(commandPaletteRecent.slice(0, 8)));
+    } catch {}
+  }, [commandPaletteRecent]);
+
+  useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
     const scopedOrder = readStoredStringArray(officeLayoutStorageKey);
     const legacyOrder = readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY);
@@ -5019,10 +5063,16 @@ export function App(): JSX.Element {
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
   const selectedCharacterSheetAgent = orgAgents.find((x) => x.id === characterSheetAgentId) || null;
+  const rememberCommandPaletteItem = (item: CommandPaletteItem): void => {
+    setCommandPaletteRecent((prev) => [
+      { id: item.id, title: item.title, subtitle: item.subtitle },
+      ...prev.filter((row) => row.id !== item.id),
+    ].slice(0, 8));
+  };
   const commandPaletteItems = useMemo(() => {
-    const rows: Array<{ id: string; title: string; subtitle: string; run: () => void }> = [];
+    const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
-    const pushRow = (row: { id: string; title: string; subtitle: string; run: () => void } | null): void => {
+    const pushRow = (row: CommandPaletteItem | null): void => {
       if (!row || seen.has(row.id)) return;
       seen.add(row.id);
       rows.push(row);
@@ -5136,11 +5186,23 @@ export function App(): JSX.Element {
     orgAgents,
     taskifyTrackingItem?.run_id,
   ]);
+  const commandPaletteRecentItems = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
+    return commandPaletteRecent
+      .map((item) => itemMap.get(item.id))
+      .filter((item): item is CommandPaletteItem => !!item)
+      .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
+      .filter((item) => !q || `${item.title} ${item.subtitle}`.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecent]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
-    if (!q) return commandPaletteItems;
-    return commandPaletteItems.filter((it) => `${it.title} ${it.subtitle}`.toLowerCase().includes(q));
-  }, [commandPaletteItems, commandPaletteQuery]);
+    const recentIds = new Set(commandPaletteRecentItems.map((item) => item.id));
+    const visibleItems = commandPaletteItems.filter((item) => !recentIds.has(item.id));
+    if (!q) return visibleItems;
+    return visibleItems.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
+  }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecentItems]);
   const characterSheetMemoryItems = [
     ...characterSheetMemoryEpisodes,
     ...(characterSheetIncludeDerivedMemory ? characterSheetMemoryKnowledge : []),
@@ -7749,6 +7811,26 @@ export function App(): JSX.Element {
               placeholder="autopilot / dashboard / workspace / character sheet"
               onChange={(e) => setCommandPaletteQuery(e.target.value)}
             />
+            {commandPaletteRecentItems.length ? (
+              <div className="list">
+                <div className="so-muted">Recent</div>
+                {commandPaletteRecentItems.map((item) => (
+                  <button
+                    key={`recent_${item.id}`}
+                    type="button"
+                    className="list-item so-card"
+                    onClick={() => {
+                      rememberCommandPaletteItem(item);
+                      setCommandPaletteOpen(false);
+                      item.run();
+                    }}
+                  >
+                    <div>{item.title}</div>
+                    <small>{item.subtitle}</small>
+                  </button>
+                ))}
+              </div>
+            ) : null}
             <div className="list">
               {commandPaletteFiltered.map((item) => (
                 <button
@@ -7756,6 +7838,7 @@ export function App(): JSX.Element {
                   type="button"
                   className="list-item so-card"
                   onClick={() => {
+                    rememberCommandPaletteItem(item);
                     setCommandPaletteOpen(false);
                     item.run();
                   }}
@@ -7764,7 +7847,7 @@ export function App(): JSX.Element {
                   <small>{item.subtitle}</small>
                 </button>
               ))}
-              {!commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
+              {!commandPaletteRecentItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
             </div>
           </div>
         </div>

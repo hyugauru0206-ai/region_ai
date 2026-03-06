@@ -1058,6 +1058,80 @@ function buildContextBadge(prefix: string, value: unknown, keep = 8): { label: s
   };
 }
 
+function buildRecentIssueSummary(input: {
+  trackerStatus?: string;
+  trackerError?: string;
+  trackerId?: string;
+  trackerRunId?: string;
+  runStatus?: string;
+  runId?: string;
+  runError?: string;
+  runCanResume?: boolean;
+  queueStatus?: string;
+  queueRunId?: string;
+  queueNote?: string;
+  heartbeatFailureCount?: number;
+  suggestFailureCount?: number;
+  consolidationResult?: string;
+}): { text: string; detail?: string; badge?: { label: string; full: string } | null } {
+  const trackerStatus = String(input.trackerStatus || "").trim().toLowerCase();
+  if (trackerStatus === "failed" || trackerStatus === "timeout" || trackerStatus === "canceled") {
+    return {
+      text: `Recent issue: tracker ${trackerStatus}`,
+      detail: String(input.trackerError || trackerStatus),
+      badge: buildContextBadge("trk", input.trackerRunId || input.trackerId || ""),
+    };
+  }
+
+  const runStatus = String(input.runStatus || "").trim().toLowerCase();
+  if (runStatus === "failed" || runStatus === "canceled" || runStatus === "stopped") {
+    const paused = runStatus !== "failed" && !!input.runCanResume;
+    return {
+      text: paused ? "Recent issue: autopilot paused" : `Recent issue: run ${runStatus}`,
+      detail: String(input.runError || runStatus),
+      badge: buildContextBadge("run", input.runId || ""),
+    };
+  }
+
+  const queueStatus = String(input.queueStatus || "").trim().toLowerCase();
+  if (queueStatus === "failed") {
+    return {
+      text: "Recent issue: queue item failed",
+      detail: String(input.queueNote || queueStatus),
+      badge: buildContextBadge("run", input.queueRunId || ""),
+    };
+  }
+
+  if (Number(input.heartbeatFailureCount || 0) > 0) {
+    return {
+      text: "Recent issue: heartbeat failures detected",
+      detail: `failure_count=${Number(input.heartbeatFailureCount || 0)}`,
+      badge: buildContextBadge("trk", "heartbeat"),
+    };
+  }
+
+  if (Number(input.suggestFailureCount || 0) > 0) {
+    return {
+      text: "Recent issue: suggest failures detected",
+      detail: `failure_count=${Number(input.suggestFailureCount || 0)}`,
+      badge: buildContextBadge("trk", "suggest"),
+    };
+  }
+
+  const consolidationResult = String(input.consolidationResult || "").trim().toLowerCase();
+  if (consolidationResult && consolidationResult !== "ok" && consolidationResult !== "success") {
+    return {
+      text: "Recent issue: consolidation not healthy",
+      detail: consolidationResult,
+      badge: buildContextBadge("trk", "consolidation"),
+    };
+  }
+
+  return {
+    text: "Recent issue: no recent failures",
+  };
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
@@ -5032,6 +5106,22 @@ export function App(): JSX.Element {
     `suggest:${String(dailyLoopDashboard?.suggest?.last_auto_accept_at || "-")}`,
     `consolidation:${String(dailyLoopDashboard?.consolidation?.facilitator?.last_run_at || "-")}`,
   ].join(" | ");
+  const controlRoomRecentIssue = buildRecentIssueSummary({
+    trackerStatus: activeExecutionTracker?.status,
+    trackerError: activeExecutionTracker?.lastError,
+    trackerId: activeExecutionTracker?.id,
+    trackerRunId: activeExecutionTracker?.runId,
+    runStatus: councilStatus?.run?.status,
+    runId: officeRunId,
+    runError: councilStatus?.run?.last_error,
+    runCanResume: councilStatus?.run?.can_resume,
+    queueStatus: taskifyTrackingItem?.status,
+    queueRunId: taskifyTrackingItem?.run_id,
+    queueNote: taskifyTrackingItem?.note,
+    heartbeatFailureCount: dailyLoopDashboard?.heartbeat?.failure_count,
+    suggestFailureCount: dailyLoopDashboard?.suggest?.failure_count,
+    consolidationResult: dailyLoopDashboard?.consolidation?.facilitator?.last_result,
+  });
   const latestDebateRound = inboxItems.find((x) => String(x.source || "").trim() === "council_autopilot_round")
     || inboxItems.find((x) => String(x.title || "").toLowerCase().includes("round"));
   const debateBody = String(latestDebateRound?.body || "").trim();
@@ -6112,6 +6202,10 @@ export function App(): JSX.Element {
                   <div className="so-muted">Routines</div>
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                 </div>
+              </div>
+              <div className="so-muted wrapAnywhere" title={controlRoomRecentIssue.detail || controlRoomRecentIssue.text}>
+                {controlRoomRecentIssue.text}
+                {controlRoomRecentIssue.badge ? <span className="so-kbd">{controlRoomRecentIssue.badge.label}</span> : null}
               </div>
               <div className="composer-actions">
                 <button

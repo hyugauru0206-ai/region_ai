@@ -6288,39 +6288,91 @@ export function App(): JSX.Element {
               </div>
               <div className="office-seats">
                 {orderedAgents.length < 1 ? <div className="so-card so-muted">No agents</div> : null}
-                {orderedAgents.map((agent) => (
-                  <button
-                    key={`office_${agent.id}`}
-                    type="button"
-                    draggable={orderedAgents.length > 1}
-                    className={`office-seat so-card status-${agent.status} ${officeDragAgentId === agent.id ? "is-dragging" : ""}`}
-                    onClick={() => openCharacterSheet(agent.id)}
-                    onDragStart={(ev) => {
-                      ev.dataTransfer.effectAllowed = "move";
-                      ev.dataTransfer.setData("text/plain", agent.id);
-                      setOfficeDragAgentId(agent.id);
-                    }}
-                    onDragOver={(ev) => {
-                      if (!officeDragAgentId || officeDragAgentId === agent.id) return;
-                      ev.preventDefault();
-                      ev.dataTransfer.dropEffect = "move";
-                    }}
-                    onDrop={(ev) => {
-                      ev.preventDefault();
-                      const dragId = ev.dataTransfer.getData("text/plain") || officeDragAgentId;
-                      reorderOfficeLayoutByIds(dragId, agent.id);
-                      setOfficeDragAgentId("");
-                    }}
-                    onDragEnd={() => setOfficeDragAgentId("")}
-                  >
-                    <div className="office-seat-head">
-                      <strong>{agent.icon} {agent.display_name}</strong>
-                      <span className={`workspace-status-badge status-${agent.status}`}>{agent.status}</span>
+                {orderedAgents.map((agent) => {
+                  const officeSeatThreadKeyCandidates = [
+                    String(agent.thread_key || "").trim().toLowerCase(),
+                    String(councilThreadKey || councilStatus?.run?.thread_key || "").trim().toLowerCase(),
+                    String(activeExecutionTracker?.threadKey || "").trim().toLowerCase(),
+                  ];
+                  const officeSeatThreadKey = officeSeatThreadKeyCandidates.find((item) => isValidInboxThreadKey(item)) || "";
+                  const officeSeatTrackerRunId = String(
+                    workspaceBubbles[agent.id]?.run_id
+                    || officeRunId
+                    || activeExecutionTracker?.runId
+                    || ""
+                  ).trim();
+                  return (
+                    <div
+                      key={`office_${agent.id}`}
+                      role="button"
+                      tabIndex={0}
+                      draggable={orderedAgents.length > 1}
+                      className={`office-seat so-card status-${agent.status} ${officeDragAgentId === agent.id ? "is-dragging" : ""}`}
+                      onClick={() => openCharacterSheet(agent.id)}
+                      onKeyDown={(ev) => {
+                        if (ev.key === "Enter" || ev.key === " ") {
+                          ev.preventDefault();
+                          openCharacterSheet(agent.id);
+                        }
+                      }}
+                      onDragStart={(ev) => {
+                        ev.dataTransfer.effectAllowed = "move";
+                        ev.dataTransfer.setData("text/plain", agent.id);
+                        setOfficeDragAgentId(agent.id);
+                      }}
+                      onDragOver={(ev) => {
+                        if (!officeDragAgentId || officeDragAgentId === agent.id) return;
+                        ev.preventDefault();
+                        ev.dataTransfer.dropEffect = "move";
+                      }}
+                      onDrop={(ev) => {
+                        ev.preventDefault();
+                        const dragId = ev.dataTransfer.getData("text/plain") || officeDragAgentId;
+                        reorderOfficeLayoutByIds(dragId, agent.id);
+                        setOfficeDragAgentId("");
+                      }}
+                      onDragEnd={() => setOfficeDragAgentId("")}
+                    >
+                      <div className="office-seat-head">
+                        <strong>{agent.icon} {agent.display_name}</strong>
+                        <span className={`workspace-status-badge status-${agent.status}`}>{agent.status}</span>
+                      </div>
+                      <div className="so-muted wrapAnywhere">{agent.role}</div>
+                      <div className="so-muted wrapAnywhere">thread: {agent.assigned_thread_id || "-"}</div>
+                      <div
+                        className="composer-actions"
+                        onClick={(ev) => ev.stopPropagation()}
+                        onPointerDown={(ev) => ev.stopPropagation()}
+                      >
+                        <button
+                          type="button"
+                          title={`Open Character Sheet: ${agent.id}`}
+                          onClick={() => openCharacterSheet(agent.id)}
+                        >
+                          Character
+                        </button>
+                        {officeSeatThreadKey ? (
+                          <button
+                            type="button"
+                            title={`Open Thread: ${officeSeatThreadKey}`}
+                            onClick={() => openTrackerThread(officeSeatThreadKey)}
+                          >
+                            Thread
+                          </button>
+                        ) : null}
+                        {officeSeatTrackerRunId ? (
+                          <button
+                            type="button"
+                            title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
+                            onClick={() => jumpToRun(officeSeatTrackerRunId)}
+                          >
+                            Tracker
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                    <div className="so-muted wrapAnywhere">{agent.role}</div>
-                    <div className="so-muted wrapAnywhere">thread: {agent.assigned_thread_id || "-"}</div>
-                  </button>
-                ))}
+                  );
+                })}
               </div>
             </section>
             <section className="so-panel office-life">

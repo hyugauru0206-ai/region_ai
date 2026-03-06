@@ -1042,6 +1042,13 @@ function getOfficeLayoutStorageKey(workspaceKey: string): string {
   return `${OFFICE_LAYOUT_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
 }
 
+function formatCompactTargetId(prefix: string, value: unknown, keep = 8): string {
+  const raw = String(value || "").trim();
+  if (!raw) return "";
+  const compact = raw.length > keep ? raw.slice(0, keep) : raw;
+  return `${prefix}:${compact}`;
+}
+
 function arraysEqual(a: string[], b: string[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
@@ -5047,13 +5054,17 @@ export function App(): JSX.Element {
     ];
     const threadKey = threadKeyCandidates.find((item) => isValidInboxThreadKey(item)) || "";
     const runId = runIdCandidates.find((item) => !!item) || "";
+    const memoryAgentId = agent?.id || "";
     return {
       role: spec.role,
       agentId: spec.agentId,
       text: debateBubble(spec.prefix, `${spec.prefix} data not available`),
       threadKey,
       runId,
-      memoryAgentId: agent?.id || "",
+      memoryAgentId,
+      threadLabel: formatCompactTargetId("thr", threadKey),
+      runLabel: formatCompactTargetId("run", runId),
+      memoryLabel: formatCompactTargetId("mem", memoryAgentId),
       status: normalizeChainStatus(String(agent?.status || (officeRunStatus === "running" ? "running" : "idle"))),
     };
   });
@@ -6242,9 +6253,18 @@ export function App(): JSX.Element {
                     </div>
                     <div className="wrapAnywhere">{row.text}</div>
                     <div className="debate-evidence-links">
-                      <button type="button" disabled={!row.threadKey} onClick={() => openDebateEvidence("thread", row)}>Thread</button>
-                      <button type="button" disabled={!row.runId} onClick={() => openDebateEvidence("tracker", row)}>Tracker</button>
-                      <button type="button" disabled={!row.memoryAgentId} onClick={() => openDebateEvidence("memory", row)}>Memory</button>
+                      <button type="button" disabled={!row.threadKey} onClick={() => openDebateEvidence("thread", row)} title={row.threadKey || undefined}>
+                        Thread
+                        {row.threadLabel ? <span className="so-kbd">{row.threadLabel}</span> : null}
+                      </button>
+                      <button type="button" disabled={!row.runId} onClick={() => openDebateEvidence("tracker", row)} title={row.runId || undefined}>
+                        Tracker
+                        {row.runLabel ? <span className="so-kbd">{row.runLabel}</span> : null}
+                      </button>
+                      <button type="button" disabled={!row.memoryAgentId} onClick={() => openDebateEvidence("memory", row)} title={row.memoryAgentId || undefined}>
+                        Memory
+                        {row.memoryLabel ? <span className="so-kbd">{row.memoryLabel}</span> : null}
+                      </button>
                     </div>
                   </article>
                 ))}

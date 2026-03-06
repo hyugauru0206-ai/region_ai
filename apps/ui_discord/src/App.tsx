@@ -5020,49 +5020,122 @@ export function App(): JSX.Element {
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
   const selectedCharacterSheetAgent = orgAgents.find((x) => x.id === characterSheetAgentId) || null;
   const commandPaletteItems = useMemo(() => {
-    const rows: Array<{ id: string; title: string; subtitle: string; run: () => void }> = [
-      {
-        id: "autopilot",
-        title: "Autopilot",
-        subtitle: "Open dashboard autopilot actions",
-        run: () => openPrimaryAutopilot(),
-      },
-      {
-        id: "dashboard",
-        title: "Dashboard",
-        subtitle: "Open daily loop dashboard",
-        run: () => openPrimaryDashboard(),
-      },
-      {
-        id: "workspace",
-        title: "Workspace",
-        subtitle: "Open workspace room",
-        run: () => openPrimaryWorkspace(),
-      },
-      {
-        id: "office",
-        title: "Office",
-        subtitle: "Open control room office view",
-        run: () => openPrimaryOffice(),
-      },
-      {
-        id: "debate",
-        title: "Debate",
-        subtitle: "Open discussion stage view",
-        run: () => openPrimaryDebate(),
-      },
-    ];
+    const rows: Array<{ id: string; title: string; subtitle: string; run: () => void }> = [];
+    const seen = new Set<string>();
+    const pushRow = (row: { id: string; title: string; subtitle: string; run: () => void } | null): void => {
+      if (!row || seen.has(row.id)) return;
+      seen.add(row.id);
+      rows.push(row);
+    };
+    pushRow({
+      id: "autopilot",
+      title: "View: Autopilot",
+      subtitle: "Open dashboard autopilot actions",
+      run: () => openPrimaryAutopilot(),
+    });
+    pushRow({
+      id: "dashboard",
+      title: "View: Dashboard",
+      subtitle: "Open daily loop dashboard",
+      run: () => openPrimaryDashboard(),
+    });
+    pushRow({
+      id: "workspace",
+      title: "View: Workspace",
+      subtitle: "Open workspace room",
+      run: () => openPrimaryWorkspace(),
+    });
+    pushRow({
+      id: "office",
+      title: "View: Office",
+      subtitle: "Open control room office view",
+      run: () => openPrimaryOffice(),
+    });
+    pushRow({
+      id: "control_room",
+      title: "View: ControlRoom",
+      subtitle: "Alias for the current office control room",
+      run: () => openPrimaryOffice(),
+    });
+    pushRow({
+      id: "debate",
+      title: "View: Debate",
+      subtitle: "Open discussion stage view",
+      run: () => openPrimaryDebate(),
+    });
     const reopenTarget = String(characterSheetAgentId || characterSheetLastAgentId || "").trim();
     if (reopenTarget) {
-      rows.push({
-        id: "character_sheet",
-        title: "Open Character Sheet",
-        subtitle: "Reopen right-pane sheet for the latest agent",
+      const reopenAgent = orgAgents.find((agent) => String(agent.id || "").trim() === reopenTarget) || null;
+      pushRow({
+        id: `character_sheet_${reopenTarget}`,
+        title: `Agent: ${reopenAgent?.display_name || reopenTarget}`,
+        subtitle: "Reopen right-pane Character Sheet",
         run: () => openCharacterSheet(reopenTarget),
       });
     }
+    orgAgents.slice(0, 6).forEach((agent) => {
+      const agentId = String(agent.id || "").trim();
+      if (!agentId) return;
+      pushRow({
+        id: `agent_${agentId}`,
+        title: `Agent: ${agent.display_name || agentId}`,
+        subtitle: `${agent.role || "Character Sheet"} | ${agent.status || "idle"}`,
+        run: () => openCharacterSheet(agentId),
+      });
+    });
+    const activeThreadKey = [
+      String(activeExecutionTracker?.threadKey || "").trim().toLowerCase(),
+      String(councilThreadKey || councilStatus?.run?.thread_key || "").trim().toLowerCase(),
+    ].find((item) => isValidInboxThreadKey(item)) || "";
+    if (activeThreadKey) {
+      pushRow({
+        id: `thread_${activeThreadKey}`,
+        title: `Thread: ${formatCompactTargetId("thr", activeThreadKey)}`,
+        subtitle: "Open current thread in the right pane",
+        run: () => openTrackerThread(activeThreadKey),
+      });
+    }
+    const activeTrackerThreadKey = isValidInboxThreadKey(String(activeExecutionTracker?.threadKey || "").trim().toLowerCase())
+      ? String(activeExecutionTracker?.threadKey || "").trim().toLowerCase()
+      : activeThreadKey;
+    const activeTrackerLabel = String(activeExecutionTracker?.id || activeTrackerThreadKey || "").trim();
+    const activeTrackerRunId = String(activeExecutionTracker?.runId || taskifyTrackingItem?.run_id || "").trim();
+    if (activeTrackerLabel && (activeTrackerRunId || activeTrackerThreadKey)) {
+      pushRow({
+        id: `tracker_${activeTrackerLabel}`,
+        title: `Tracker: ${formatCompactTargetId("trk", activeTrackerLabel)}`,
+        subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
+        run: () => {
+          if (activeTrackerRunId) {
+            jumpToRun(activeTrackerRunId);
+            return;
+          }
+          openTrackerThread(activeTrackerThreadKey);
+        },
+      });
+    }
+    const activeRunId = String(activeExecutionTracker?.runId || councilStatus?.run?.run_id || taskifyTrackingItem?.run_id || "").trim();
+    if (activeRunId) {
+      pushRow({
+        id: `run_${activeRunId}`,
+        title: `Run: ${formatCompactTargetId("run", activeRunId)}`,
+        subtitle: "Open current operational run",
+        run: () => jumpToRun(activeRunId),
+      });
+    }
     return rows;
-  }, [characterSheetAgentId, characterSheetLastAgentId]);
+  }, [
+    activeExecutionTracker?.id,
+    activeExecutionTracker?.runId,
+    activeExecutionTracker?.threadKey,
+    characterSheetAgentId,
+    characterSheetLastAgentId,
+    councilStatus?.run?.run_id,
+    councilStatus?.run?.thread_key,
+    councilThreadKey,
+    orgAgents,
+    taskifyTrackingItem?.run_id,
+  ]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     if (!q) return commandPaletteItems;

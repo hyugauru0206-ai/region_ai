@@ -104,11 +104,20 @@ function Test-Host443Reachable {
   }
 }
 
-$offlineReasons = New-Object 'System.Collections.Generic.List[string]'
+$offlineReason = ""
+$offlineReasonOverride = [string]$env:REGION_AI_SMOKE_OFFLINE_REASON
 $offlineForcedByEnv = @("1", "true", "TRUE") -contains [string]$env:REGION_AI_SMOKE_OFFLINE
-$offlineMode = [bool]$Offline -or $offlineForcedByEnv
-if ($offlineMode) {
-  [void]$offlineReasons.Add("forced")
+$offlineMode = $false
+if ([bool]$Offline) {
+  $offlineMode = $true
+  $offlineReason = "forced_by_flag"
+} elseif ($offlineForcedByEnv) {
+  $offlineMode = $true
+  if (-not [string]::IsNullOrWhiteSpace($offlineReasonOverride)) {
+    $offlineReason = $offlineReasonOverride
+  } else {
+    $offlineReason = "forced_by_env"
+  }
 } else {
   $openaiHost = "api.openai.com"
   try {
@@ -124,12 +133,16 @@ if ($offlineMode) {
   foreach ($h in $checkHosts) {
     if (-not (Test-Host443Reachable -HostName $h)) {
       $offlineMode = $true
-      [void]$offlineReasons.Add("$h:443_unreachable")
+      $offlineReason = "auto_detect_host_unreachable:$h:443"
+      break
     }
   }
 }
+if ($offlineMode -and [string]::IsNullOrWhiteSpace($offlineReason)) {
+  $offlineReason = "forced_by_env"
+}
 if ($offlineMode -and -not $Json) {
-  $reasonLine = if ($offlineReasons.Count -gt 0) { ($offlineReasons -join ",") } else { "unknown" }
+  $reasonLine = if (-not [string]::IsNullOrWhiteSpace($offlineReason)) { $offlineReason } else { "unknown" }
   Write-Output ("ui_smoke_offline_mode: " + $reasonLine)
 }
 
@@ -137,6 +150,7 @@ $result = [ordered]@{
   action = "ui_smoke"
   api_url = $apiUrl
   offline_mode = $offlineMode
+  offline_reason = $offlineReason
   skipped_steps = @()
   status_code = 0
   threads_ok = $false

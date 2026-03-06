@@ -126,6 +126,7 @@
   - If pack files are missing, `ui_build_smoke` fails with `deps_pack_missing`.
 - Smoke check:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Json`
+  - On restricted local machines, `node tools/ci_smoke_gate_runner.cjs` may explicitly pin offline mode for that run so `ui_smoke` and gate logs stay consistent.
   - Network-limited mode (443 blocked):
     - PowerShell: `$env:REGION_AI_SMOKE_OFFLINE="1"`
     - cmd.exe: `set REGION_AI_SMOKE_OFFLINE=1`

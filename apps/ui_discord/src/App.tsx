@@ -5149,6 +5149,48 @@ export function App(): JSX.Element {
       ].slice(0, 6);
     });
   };
+  const buildFavoriteViewTarget = (id: string, title: string, subtitle: string): CommandPaletteRecentItem | null => {
+    const targetId = String(id || "").trim();
+    if (!targetId) return null;
+    return { id: targetId, title, subtitle };
+  };
+  const buildFavoriteAgentTarget = (agentId: string, displayName?: string, role?: string, status?: string): CommandPaletteRecentItem | null => {
+    const targetId = String(agentId || "").trim();
+    if (!targetId) return null;
+    return {
+      id: "agent_" + targetId,
+      title: "Agent: " + (displayName || targetId),
+      subtitle: (role || "Character Sheet") + " | " + (status || "idle"),
+    };
+  };
+  const buildFavoriteThreadTarget = (threadKey: string): CommandPaletteRecentItem | null => {
+    const targetId = String(threadKey || "").trim().toLowerCase();
+    if (!isValidInboxThreadKey(targetId)) return null;
+    return {
+      id: "thread_" + targetId,
+      title: "Thread: " + formatCompactTargetId("thr", targetId),
+      subtitle: "Open current thread in the right pane",
+    };
+  };
+  const buildFavoriteTrackerTarget = (targetId: string, runId?: string): CommandPaletteRecentItem | null => {
+    const stableId = String(targetId || "").trim();
+    const stableRunId = String(runId || "").trim();
+    if (!stableId) return null;
+    return {
+      id: "tracker_" + stableId,
+      title: "Tracker: " + formatCompactTargetId("trk", stableId),
+      subtitle: stableRunId ? "Open tracked run " + formatCompactTargetId("run", stableRunId) : "Open current tracker thread",
+    };
+  };
+  const buildFavoriteRunTarget = (runId: string): CommandPaletteRecentItem | null => {
+    const targetId = String(runId || "").trim();
+    if (!targetId) return null;
+    return {
+      id: "run_" + targetId,
+      title: "Run: " + formatCompactTargetId("run", targetId),
+      subtitle: "Open current operational run",
+    };
+  };
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -5272,16 +5314,76 @@ export function App(): JSX.Element {
     taskifyTrackingItem?.run_id,
   ]);
   const favoriteTargetIds = useMemo(() => new Set(commandPaletteFavorites.map((item) => item.id)), [commandPaletteFavorites]);
+  const resolveStoredFavoriteItem = (item: CommandPaletteRecentItem, itemMap: Map<string, CommandPaletteItem>): CommandPaletteItem | null => {
+    const direct = itemMap.get(item.id);
+    if (direct) return direct;
+    if (item.id === "autopilot") return { ...item, run: () => openPrimaryAutopilot() };
+    if (item.id === "dashboard") return { ...item, run: () => openPrimaryDashboard() };
+    if (item.id === "workspace") return { ...item, run: () => openPrimaryWorkspace() };
+    if (item.id === "office" || item.id === "control_room") return { ...item, run: () => openPrimaryOffice() };
+    if (item.id === "debate" || item.id.startsWith("debate_badge_")) return { ...item, run: () => openPrimaryDebate() };
+    if (item.id.startsWith("character_sheet_") || item.id.startsWith("agent_")) {
+      const agentId = String(item.id.replace(/^character_sheet_/, "").replace(/^agent_/, "") || "").trim();
+      if (!agentId || !orgAgents.some((agent) => String(agent.id || "").trim() === agentId)) return null;
+      return { ...item, run: () => openCharacterSheet(agentId) };
+    }
+    if (item.id.startsWith("thread_")) {
+      const threadKey = String(item.id.slice("thread_".length) || "").trim().toLowerCase();
+      if (!isValidInboxThreadKey(threadKey)) return null;
+      return { ...item, run: () => openTrackerThread(threadKey) };
+    }
+    if (item.id.startsWith("tracker_")) {
+      const trackerTarget = String(item.id.slice("tracker_".length) || "").trim();
+      if (!trackerTarget) return null;
+      return {
+        ...item,
+        run: () => {
+          recordRecentTarget(item);
+          if (isValidInboxThreadKey(trackerTarget)) {
+            openTrackerThread(trackerTarget);
+            return;
+          }
+          jumpToRun(trackerTarget);
+        },
+      };
+    }
+    if (item.id.startsWith("run_")) {
+      const runId = String(item.id.slice("run_".length) || "").trim();
+      if (!runId) return null;
+      return { ...item, run: () => jumpToRun(runId) };
+    }
+    return null;
+  };
   const commandPaletteFavoriteItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
     return commandPaletteFavorites
-      .map((item) => itemMap.get(item.id))
+      .map((item) => resolveStoredFavoriteItem(item, itemMap))
       .filter((item): item is CommandPaletteItem => !!item)
       .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
-      .filter((item) => !q || `${item.title} ${item.subtitle}`.toLowerCase().includes(q))
+      .filter((item) => !q || ((item.title + " " + item.subtitle).toLowerCase().includes(q)))
       .slice(0, 6);
-  }, [commandPaletteFavorites, commandPaletteItems, commandPaletteQuery]);
+  }, [commandPaletteFavorites, commandPaletteItems, commandPaletteQuery, orgAgents]);
+  const isFavoriteTarget = (itemId: string): boolean => favoriteTargetIds.has(itemId);
+  const renderFavoriteToggleButton = (item: CommandPaletteRecentItem | null, label: string): JSX.Element | null => {
+    if (!item) return null;
+    const isFavorite = isFavoriteTarget(item.id);
+    return (
+      <button
+        type="button"
+        className="inline-link"
+        title={isFavorite ? "Unpin " + label.toLowerCase() : label}
+        aria-pressed={isFavorite}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          toggleFavoriteTarget(item);
+        }}
+        onPointerDown={(ev) => ev.stopPropagation()}
+      >
+        {isFavorite ? "Unpin" : "Pin"}
+      </button>
+    );
+  };
   const commandPaletteRecentItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
@@ -6462,7 +6564,9 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">run_id: {officeRunId || "-"}</div>
                   <div className="composer-actions">
                     {officeRunId ? <button type="button" onClick={() => jumpToRun(officeRunId)}>Open</button> : null}
+                    {officeRunId ? renderFavoriteToggleButton(buildFavoriteRunTarget(officeRunId), "Pin run") : null}
                     {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Thread</button> : null}
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomThreadKey), "Pin thread") : null}
                   </div>
                 </div>
                 <div className="so-card">
@@ -6470,6 +6574,7 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeQueueLabel}</div>
                   <div className="composer-actions">
                     {taskifyTrackingItem?.run_id ? <button type="button" onClick={() => jumpToRun(String(taskifyTrackingItem.run_id || ""))}>Open</button> : null}
+                    {taskifyTrackingItem?.run_id ? renderFavoriteToggleButton(buildFavoriteRunTarget(String(taskifyTrackingItem.run_id || "")), "Pin run") : null}
                   </div>
                 </div>
                 <div className="so-card">
@@ -6477,6 +6582,7 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeAutopilotLabel}</div>
                   <div className="composer-actions">
                     {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Open</button> : null}
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomThreadKey), "Pin thread") : null}
                   </div>
                 </div>
                 <div className="so-card">
@@ -6484,6 +6590,7 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                   <div className="composer-actions">
                     {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => { const trackerRecentKey = String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(); recordRecentTarget({ id: `tracker_${trackerRecentKey}`, title: `Tracker: ${formatCompactTargetId("trk", trackerRecentKey)}`, subtitle: activeExecutionTracker?.runId ? `Open tracked run ${formatCompactTargetId("run", activeExecutionTracker.runId)}` : "Open current tracker thread" }); openTrackerThread(controlRoomTrackerThreadKey); }}>Tracker</button> : null}
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(), activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined), "Pin tracker") : null}
                   </div>
                 </div>
               </div>
@@ -6491,7 +6598,9 @@ export function App(): JSX.Element {
                 {controlRoomRecentIssue.text}
                 {controlRoomRecentIssue.badge ? <span className="so-kbd">{controlRoomRecentIssue.badge.label}</span> : null}
                 {controlRoomIssueRunId ? <button type="button" className="inline-link" onClick={() => jumpToRun(controlRoomIssueRunId)}>Open</button> : null}
+                {controlRoomIssueRunId ? renderFavoriteToggleButton(buildFavoriteRunTarget(controlRoomIssueRunId), "Pin run") : null}
                 {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? <button type="button" className="inline-link" onClick={() => openTrackerThread(controlRoomIssueThreadKey)}>Open</button> : null}
+                {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomIssueThreadKey), "Pin thread") : null}
               </div>
               <div className="composer-actions">
                 <button
@@ -6618,30 +6727,37 @@ export function App(): JSX.Element {
                         >
                           Character
                         </button>
+                        {renderFavoriteToggleButton(buildFavoriteAgentTarget(agent.id, agent.display_name, agent.role, agent.status), "Pin character")}
                         {officeSeatThreadKey ? (
-                          <button
-                            type="button"
-                            title={`Open Thread: ${officeSeatThreadKey}`}
-                            onClick={() => openTrackerThread(officeSeatThreadKey)}
-                          >
-                            Thread
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              title={`Open Thread: ${officeSeatThreadKey}`}
+                              onClick={() => openTrackerThread(officeSeatThreadKey)}
+                            >
+                              Thread
+                            </button>
+                            {renderFavoriteToggleButton(buildFavoriteThreadTarget(officeSeatThreadKey), "Pin thread")}
+                          </>
                         ) : null}
                         {officeSeatTrackerRunId ? (
-                          <button
-                            type="button"
-                            title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
-                            onClick={() => {
-                              recordRecentTarget({
-                                id: `tracker_${officeSeatTrackerRunId}`,
-                                title: `Tracker: ${formatCompactTargetId("trk", officeSeatTrackerRunId)}`,
-                                subtitle: `Open tracked run ${formatCompactTargetId("run", officeSeatTrackerRunId)}`,
-                              });
-                              jumpToRun(officeSeatTrackerRunId);
-                            }}
-                          >
-                            Tracker
-                          </button>
+                          <>
+                            <button
+                              type="button"
+                              title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
+                              onClick={() => {
+                                recordRecentTarget({
+                                  id: `tracker_${officeSeatTrackerRunId}`,
+                                  title: `Tracker: ${formatCompactTargetId("trk", officeSeatTrackerRunId)}`,
+                                  subtitle: `Open tracked run ${formatCompactTargetId("run", officeSeatTrackerRunId)}`,
+                                });
+                                jumpToRun(officeSeatTrackerRunId);
+                              }}
+                            >
+                              Tracker
+                            </button>
+                            {renderFavoriteToggleButton(buildFavoriteTrackerTarget(officeSeatTrackerRunId, officeSeatTrackerRunId), "Pin tracker")}
+                          </>
                         ) : null}
                       </div>
                     </div>
@@ -6686,9 +6802,15 @@ export function App(): JSX.Element {
                 </div>
                 {debateChainBadges.length ? (
                   <div className="composer-actions">
-                    {debateChainBadges.map((badge) => (
-                      <span key={badge.label} className="so-kbd" title={badge.full}>{badge.label}</span>
-                    ))}
+                    {debateChainBadges.map((badge) => {
+                      const debateBadgeItem = buildFavoriteViewTarget(`debate_badge_${badge.full}`, `Debate: ${badge.label}`, badge.full);
+                      return (
+                        <span key={badge.label} className="so-kbd" title={badge.full}>
+                          {badge.label}
+                          {renderFavoriteToggleButton(debateBadgeItem, "Pin debate context")}
+                        </span>
+                      );
+                    })}
                   </div>
                 ) : null}
                 {activeDebateChain.length ? (
@@ -6718,10 +6840,12 @@ export function App(): JSX.Element {
                         Thread
                         {row.threadLabel ? <span className="so-kbd">{row.threadLabel}</span> : null}
                       </button>
+                      {row.threadKey ? renderFavoriteToggleButton(buildFavoriteThreadTarget(row.threadKey), "Pin thread") : null}
                       <button type="button" disabled={!row.runId} onClick={() => openDebateEvidence("tracker", row)} title={row.runId || undefined}>
                         Tracker
                         {row.runLabel ? <span className="so-kbd">{row.runLabel}</span> : null}
                       </button>
+                      {row.runId ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(row.runId, row.runId), "Pin tracker") : null}
                       <button type="button" disabled={!row.memoryAgentId} onClick={() => openDebateEvidence("memory", row)} title={row.memoryAgentId || undefined}>
                         Memory
                         {row.memoryLabel ? <span className="so-kbd">{row.memoryLabel}</span> : null}
@@ -6740,7 +6864,9 @@ export function App(): JSX.Element {
                 <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId("facilitator"); }}>Traits</button>
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
                 <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
+                {isValidInboxThreadKey(councilThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(councilThreadKey), "Pin thread") : null}
                 <button type="button" disabled={!officeRunId} onClick={() => { recordRecentTarget({ id: `tracker_${officeRunId}`, title: `Tracker: ${formatCompactTargetId("trk", officeRunId)}`, subtitle: `Open tracked run ${formatCompactTargetId("run", officeRunId)}` }); jumpToRun(officeRunId); }}>Tracker/Run</button>
+                {officeRunId ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(officeRunId, officeRunId), "Pin tracker") : null}
               </div>
               <div className="composer-actions">
                 <button

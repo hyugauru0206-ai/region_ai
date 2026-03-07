@@ -3014,11 +3014,7 @@ export function App(): JSX.Element {
       showToast("thread_key missing");
       return;
     }
-    recordRecentTarget({
-      id: `thread_${key}`,
-      title: `Thread: ${formatCompactTargetId("thr", key)}`,
-      subtitle: "Open current thread in the right pane",
-    });
+    recordRecentTargetEntry(buildThreadTargetEntry(key));
     setInboxThreadKeyFilter(key);
     setInboxFilter("");
     setActiveChannel("inbox");
@@ -4901,11 +4897,7 @@ export function App(): JSX.Element {
   function jumpToRun(runId: string): void {
     const id = String(runId || "").trim();
     if (!id) return;
-    recordRecentTarget({
-      id: `run_${id}`,
-      title: `Run: ${formatCompactTargetId("run", id)}`,
-      subtitle: "Open current operational run",
-    });
+    recordRecentTargetEntry(buildRunTargetEntry(id));
     setActiveChannel("runs");
     setSelectedRunId(id);
   }
@@ -4938,11 +4930,7 @@ export function App(): JSX.Element {
     const id = String(agentId || "").trim();
     if (!id) return;
     const agent = orgAgents.find((item) => String(item.id || "").trim() === id) || null;
-    recordRecentTarget({
-      id: `agent_${id}`,
-      title: `Agent: ${agent?.display_name || id}`,
-      subtitle: agent?.role ? `${agent.role} | ${agent.status || "idle"}` : "Open right-pane Character Sheet",
-    });
+    recordRecentTargetEntry(buildAgentTargetEntry(id, agent?.display_name, agent?.role, agent?.status, "Open right-pane Character Sheet"));
     setCharacterSheetAgentId(id);
     setCharacterSheetLastAgentId(id);
     try {
@@ -4994,11 +4982,7 @@ export function App(): JSX.Element {
         showToast("run_id missing");
         return;
       }
-      recordRecentTarget({
-        id: `tracker_${row.runId}`,
-        title: `Tracker: ${formatCompactTargetId("trk", row.runId)}`,
-        subtitle: `Open tracked run ${formatCompactTargetId("run", row.runId)}`,
-      });
+      recordTrackerRecentTarget(row.runId, row.runId);
       jumpToRun(row.runId);
       return;
     }
@@ -5233,27 +5217,35 @@ export function App(): JSX.Element {
   const recordRecentTarget = (item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">): void => {
     setCommandPaletteRecent((prev) => upsertStoredTargetEntry(prev, item, RECENT_TARGET_LIMIT));
   };
+  const recordRecentTargetEntry = (item: CommandPaletteRecentItem | null): void => {
+    if (!item) return;
+    recordRecentTarget(item);
+  };
+  const recordTrackerRecentTarget = (targetId: string, runId?: string): void => {
+    recordRecentTargetEntry(buildTrackerTargetEntry(targetId, runId));
+  };
   const toggleFavoriteTarget = (item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">): void => {
     setCommandPaletteFavorites((prev) => toggleStoredTargetEntry(prev, item, FAVORITE_TARGET_LIMIT));
   };
   const moveFavoriteTarget = (itemId: string, direction: -1 | 1): void => {
     setCommandPaletteFavorites((prev) => moveStoredTargetEntry(prev, itemId, direction));
   };
-  const buildFavoriteViewTarget = (id: string, title: string, subtitle: string): CommandPaletteRecentItem | null => {
+  const buildViewTargetEntry = (id: string, title: string, subtitle: string): CommandPaletteRecentItem | null => {
     const targetId = String(id || "").trim();
     if (!targetId) return null;
     return { id: targetId, title, subtitle };
   };
-  const buildFavoriteAgentTarget = (agentId: string, displayName?: string, role?: string, status?: string): CommandPaletteRecentItem | null => {
+  const buildAgentTargetEntry = (agentId: string, displayName?: string, role?: string, status?: string, fallbackSubtitle = "Character Sheet"): CommandPaletteRecentItem | null => {
     const targetId = String(agentId || "").trim();
     if (!targetId) return null;
+    const subtitleLead = role || fallbackSubtitle;
     return {
       id: "agent_" + targetId,
       title: "Agent: " + (displayName || targetId),
-      subtitle: (role || "Character Sheet") + " | " + (status || "idle"),
+      subtitle: role ? (subtitleLead + " | " + (status || "idle")) : subtitleLead,
     };
   };
-  const buildFavoriteThreadTarget = (threadKey: string): CommandPaletteRecentItem | null => {
+  const buildThreadTargetEntry = (threadKey: string): CommandPaletteRecentItem | null => {
     const targetId = String(threadKey || "").trim().toLowerCase();
     if (!isValidInboxThreadKey(targetId)) return null;
     return {
@@ -5262,7 +5254,7 @@ export function App(): JSX.Element {
       subtitle: "Open current thread in the right pane",
     };
   };
-  const buildFavoriteTrackerTarget = (targetId: string, runId?: string): CommandPaletteRecentItem | null => {
+  const buildTrackerTargetEntry = (targetId: string, runId?: string): CommandPaletteRecentItem | null => {
     const stableId = String(targetId || "").trim();
     const stableRunId = String(runId || "").trim();
     if (!stableId) return null;
@@ -5272,7 +5264,7 @@ export function App(): JSX.Element {
       subtitle: stableRunId ? "Open tracked run " + formatCompactTargetId("run", stableRunId) : "Open current tracker thread",
     };
   };
-  const buildFavoriteRunTarget = (runId: string): CommandPaletteRecentItem | null => {
+  const buildRunTargetEntry = (runId: string): CommandPaletteRecentItem | null => {
     const targetId = String(runId || "").trim();
     if (!targetId) return null;
     return {
@@ -5368,11 +5360,7 @@ export function App(): JSX.Element {
         title: `Tracker: ${formatCompactTargetId("trk", activeTrackerRecentKey)}`,
         subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
         run: () => {
-          recordRecentTarget({
-            id: `tracker_${activeTrackerRecentKey}`,
-            title: `Tracker: ${formatCompactTargetId("trk", activeTrackerRecentKey)}`,
-            subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
-          });
+          recordTrackerRecentTarget(activeTrackerRecentKey, activeTrackerRunId ? activeTrackerRunId : undefined);
           if (activeTrackerRunId) {
             jumpToRun(activeTrackerRunId);
             return;
@@ -6759,9 +6747,9 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">run_id: {officeRunId || "-"}</div>
                   <div className="composer-actions">
                     {officeRunId ? <button type="button" onClick={() => jumpToRun(officeRunId)}>Open</button> : null}
-                    {officeRunId ? renderFavoriteToggleButton(buildFavoriteRunTarget(officeRunId), "Pin run") : null}
+                    {officeRunId ? renderFavoriteToggleButton(buildRunTargetEntry(officeRunId), "Pin run") : null}
                     {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Thread</button> : null}
-                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomThreadKey), "Pin thread") : null}
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildThreadTargetEntry(controlRoomThreadKey), "Pin thread") : null}
                   </div>
                 </div>
                 <div className="so-card">
@@ -6769,7 +6757,7 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeQueueLabel}</div>
                   <div className="composer-actions">
                     {taskifyTrackingItem?.run_id ? <button type="button" onClick={() => jumpToRun(String(taskifyTrackingItem.run_id || ""))}>Open</button> : null}
-                    {taskifyTrackingItem?.run_id ? renderFavoriteToggleButton(buildFavoriteRunTarget(String(taskifyTrackingItem.run_id || "")), "Pin run") : null}
+                    {taskifyTrackingItem?.run_id ? renderFavoriteToggleButton(buildRunTargetEntry(String(taskifyTrackingItem.run_id || "")), "Pin run") : null}
                   </div>
                 </div>
                 <div className="so-card">
@@ -6777,15 +6765,15 @@ export function App(): JSX.Element {
                   <div className="wrapAnywhere">{officeAutopilotLabel}</div>
                   <div className="composer-actions">
                     {isValidInboxThreadKey(controlRoomThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomThreadKey)}>Open</button> : null}
-                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomThreadKey), "Pin thread") : null}
+                    {isValidInboxThreadKey(controlRoomThreadKey) ? renderFavoriteToggleButton(buildThreadTargetEntry(controlRoomThreadKey), "Pin thread") : null}
                   </div>
                 </div>
                 <div className="so-card">
                   <div className="so-muted">Routines</div>
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                   <div className="composer-actions">
-                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => { const trackerRecentKey = String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(); recordRecentTarget({ id: `tracker_${trackerRecentKey}`, title: `Tracker: ${formatCompactTargetId("trk", trackerRecentKey)}`, subtitle: activeExecutionTracker?.runId ? `Open tracked run ${formatCompactTargetId("run", activeExecutionTracker.runId)}` : "Open current tracker thread" }); openTrackerThread(controlRoomTrackerThreadKey); }}>Tracker</button> : null}
-                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(), activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined), "Pin tracker") : null}
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => { const trackerRecentKey = String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(); recordTrackerRecentTarget(trackerRecentKey, activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined); openTrackerThread(controlRoomTrackerThreadKey); }}>Tracker</button> : null}
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? renderFavoriteToggleButton(buildTrackerTargetEntry(String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(), activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined), "Pin tracker") : null}
                   </div>
                 </div>
               </div>
@@ -6793,9 +6781,9 @@ export function App(): JSX.Element {
                 {controlRoomRecentIssue.text}
                 {controlRoomRecentIssue.badge ? <span className="so-kbd">{controlRoomRecentIssue.badge.label}</span> : null}
                 {controlRoomIssueRunId ? <button type="button" className="inline-link" onClick={() => jumpToRun(controlRoomIssueRunId)}>Open</button> : null}
-                {controlRoomIssueRunId ? renderFavoriteToggleButton(buildFavoriteRunTarget(controlRoomIssueRunId), "Pin run") : null}
+                {controlRoomIssueRunId ? renderFavoriteToggleButton(buildRunTargetEntry(controlRoomIssueRunId), "Pin run") : null}
                 {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? <button type="button" className="inline-link" onClick={() => openTrackerThread(controlRoomIssueThreadKey)}>Open</button> : null}
-                {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(controlRoomIssueThreadKey), "Pin thread") : null}
+                {!controlRoomIssueRunId && isValidInboxThreadKey(controlRoomIssueThreadKey) ? renderFavoriteToggleButton(buildThreadTargetEntry(controlRoomIssueThreadKey), "Pin thread") : null}
               </div>
               <div className="composer-actions">
                 <button
@@ -6924,7 +6912,7 @@ export function App(): JSX.Element {
                         >
                           Character
                         </button>
-                        {renderFavoriteToggleButton(buildFavoriteAgentTarget(agent.id, agent.display_name, agent.role, agent.status), "Pin character")}
+                        {renderFavoriteToggleButton(buildAgentTargetEntry(agent.id, agent.display_name, agent.role, agent.status), "Pin character")}
                         {officeSeatThreadKey ? (
                           <>
                             <button
@@ -6934,7 +6922,7 @@ export function App(): JSX.Element {
                             >
                               Thread
                             </button>
-                            {renderFavoriteToggleButton(buildFavoriteThreadTarget(officeSeatThreadKey), "Pin thread")}
+                            {renderFavoriteToggleButton(buildThreadTargetEntry(officeSeatThreadKey), "Pin thread")}
                           </>
                         ) : null}
                         {officeSeatTrackerRunId ? (
@@ -6943,17 +6931,13 @@ export function App(): JSX.Element {
                               type="button"
                               title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
                               onClick={() => {
-                                recordRecentTarget({
-                                  id: `tracker_${officeSeatTrackerRunId}`,
-                                  title: `Tracker: ${formatCompactTargetId("trk", officeSeatTrackerRunId)}`,
-                                  subtitle: `Open tracked run ${formatCompactTargetId("run", officeSeatTrackerRunId)}`,
-                                });
+                                recordTrackerRecentTarget(officeSeatTrackerRunId, officeSeatTrackerRunId);
                                 jumpToRun(officeSeatTrackerRunId);
                               }}
                             >
                               Tracker
                             </button>
-                            {renderFavoriteToggleButton(buildFavoriteTrackerTarget(officeSeatTrackerRunId, officeSeatTrackerRunId), "Pin tracker")}
+                            {renderFavoriteToggleButton(buildTrackerTargetEntry(officeSeatTrackerRunId, officeSeatTrackerRunId), "Pin tracker")}
                           </>
                         ) : null}
                       </div>
@@ -7000,7 +6984,7 @@ export function App(): JSX.Element {
                 {debateChainBadges.length ? (
                   <div className="composer-actions">
                     {debateChainBadges.map((badge) => {
-                      const debateBadgeItem = buildFavoriteViewTarget(`debate_badge_${badge.full}`, `Debate: ${badge.label}`, badge.full);
+                      const debateBadgeItem = buildViewTargetEntry(`debate_badge_${badge.full}`, `Debate: ${badge.label}`, badge.full);
                       return (
                         <span key={badge.label} className="so-kbd" title={badge.full}>
                           {badge.label}
@@ -7037,12 +7021,12 @@ export function App(): JSX.Element {
                         Thread
                         {row.threadLabel ? <span className="so-kbd">{row.threadLabel}</span> : null}
                       </button>
-                      {row.threadKey ? renderFavoriteToggleButton(buildFavoriteThreadTarget(row.threadKey), "Pin thread") : null}
+                      {row.threadKey ? renderFavoriteToggleButton(buildThreadTargetEntry(row.threadKey), "Pin thread") : null}
                       <button type="button" disabled={!row.runId} onClick={() => openDebateEvidence("tracker", row)} title={row.runId || undefined}>
                         Tracker
                         {row.runLabel ? <span className="so-kbd">{row.runLabel}</span> : null}
                       </button>
-                      {row.runId ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(row.runId, row.runId), "Pin tracker") : null}
+                      {row.runId ? renderFavoriteToggleButton(buildTrackerTargetEntry(row.runId, row.runId), "Pin tracker") : null}
                       <button type="button" disabled={!row.memoryAgentId} onClick={() => openDebateEvidence("memory", row)} title={row.memoryAgentId || undefined}>
                         Memory
                         {row.memoryLabel ? <span className="so-kbd">{row.memoryLabel}</span> : null}
@@ -7061,9 +7045,9 @@ export function App(): JSX.Element {
                 <button type="button" onClick={() => { setActiveChannel("members"); setSelectedAgentId("facilitator"); }}>Traits</button>
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
                 <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
-                {isValidInboxThreadKey(councilThreadKey) ? renderFavoriteToggleButton(buildFavoriteThreadTarget(councilThreadKey), "Pin thread") : null}
-                <button type="button" disabled={!officeRunId} onClick={() => { recordRecentTarget({ id: `tracker_${officeRunId}`, title: `Tracker: ${formatCompactTargetId("trk", officeRunId)}`, subtitle: `Open tracked run ${formatCompactTargetId("run", officeRunId)}` }); jumpToRun(officeRunId); }}>Tracker/Run</button>
-                {officeRunId ? renderFavoriteToggleButton(buildFavoriteTrackerTarget(officeRunId, officeRunId), "Pin tracker") : null}
+                {isValidInboxThreadKey(councilThreadKey) ? renderFavoriteToggleButton(buildThreadTargetEntry(councilThreadKey), "Pin thread") : null}
+                <button type="button" disabled={!officeRunId} onClick={() => { recordTrackerRecentTarget(officeRunId, officeRunId); jumpToRun(officeRunId); }}>Tracker/Run</button>
+                {officeRunId ? renderFavoriteToggleButton(buildTrackerTargetEntry(officeRunId, officeRunId), "Pin tracker") : null}
               </div>
               <div className="composer-actions">
                 <button

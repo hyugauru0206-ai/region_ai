@@ -947,8 +947,6 @@ const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
 const RECENT_TARGETS_STORAGE_KEY = "region_ai.command_palette_recent.v1";
 const FAVORITE_TARGETS_STORAGE_KEY = "region_ai.favorites.v1";
 const QUICK_ACCESS_MODE_STORAGE_KEY = "region_ai.quick_access_mode.v1";
-const QUICK_ACCESS_EXPAND_FAVORITES_STORAGE_KEY = "region_ai.quick_access_expand_favorites.v1";
-const QUICK_ACCESS_EXPAND_RECENT_STORAGE_KEY = "region_ai.quick_access_expand_recent.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1107,13 +1105,6 @@ function getQuickAccessModeStorageKey(workspaceKey: string): string {
   return `${QUICK_ACCESS_MODE_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
 }
 
-function getQuickAccessExpandFavoritesStorageKey(workspaceKey: string): string {
-  return `${QUICK_ACCESS_EXPAND_FAVORITES_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
-}
-
-function getQuickAccessExpandRecentStorageKey(workspaceKey: string): string {
-  return `${QUICK_ACCESS_EXPAND_RECENT_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
-}
 
 function formatCompactTargetId(prefix: string, value: unknown, keep = 8): string {
   const raw = String(value || "").trim();
@@ -1455,8 +1446,8 @@ export function App(): JSX.Element {
     const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(resolveOfficeWorkspaceKey())) || "").trim().toLowerCase();
     return raw === "recent" ? "recent" : "favorites";
   });
-  const [quickAccessFavoritesExpanded, setQuickAccessFavoritesExpanded] = useState(() => localStorage.getItem(getQuickAccessExpandFavoritesStorageKey(resolveOfficeWorkspaceKey())) === "1");
-  const [quickAccessRecentExpanded, setQuickAccessRecentExpanded] = useState(() => localStorage.getItem(getQuickAccessExpandRecentStorageKey(resolveOfficeWorkspaceKey())) === "1");
+  const [quickAccessFavoritesExpanded, setQuickAccessFavoritesExpanded] = useState(false);
+  const [quickAccessRecentExpanded, setQuickAccessRecentExpanded] = useState(false);
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
   const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
     const raw = String(localStorage.getItem(UI_EFFECTS_STORAGE_KEY) || "").trim();
@@ -4677,8 +4668,8 @@ export function App(): JSX.Element {
   useEffect(() => {
     const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(officeWorkspaceKey)) || "").trim().toLowerCase();
     setQuickAccessMode(raw === "recent" ? "recent" : "favorites");
-    setQuickAccessFavoritesExpanded(localStorage.getItem(getQuickAccessExpandFavoritesStorageKey(officeWorkspaceKey)) === "1");
-    setQuickAccessRecentExpanded(localStorage.getItem(getQuickAccessExpandRecentStorageKey(officeWorkspaceKey)) === "1");
+    setQuickAccessFavoritesExpanded(false);
+    setQuickAccessRecentExpanded(false);
   }, [officeWorkspaceKey]);
 
   useEffect(() => {
@@ -4687,17 +4678,6 @@ export function App(): JSX.Element {
     } catch {}
   }, [officeWorkspaceKey, quickAccessMode]);
 
-  useEffect(() => {
-    try {
-      localStorage.setItem(getQuickAccessExpandFavoritesStorageKey(officeWorkspaceKey), quickAccessFavoritesExpanded ? "1" : "0");
-    } catch {}
-  }, [officeWorkspaceKey, quickAccessFavoritesExpanded]);
-
-  useEffect(() => {
-    try {
-      localStorage.setItem(getQuickAccessExpandRecentStorageKey(officeWorkspaceKey), quickAccessRecentExpanded ? "1" : "0");
-    } catch {}
-  }, [officeWorkspaceKey, quickAccessRecentExpanded]);
 
   useEffect(() => {
     const handleQuickAccessFavoriteKeydown = (ev: KeyboardEvent): void => {

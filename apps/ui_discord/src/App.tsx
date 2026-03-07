@@ -5169,6 +5169,18 @@ export function App(): JSX.Element {
       ].slice(0, 6);
     });
   };
+  const moveFavoriteTarget = (itemId: string, direction: -1 | 1): void => {
+    setCommandPaletteFavorites((prev) => {
+      const index = prev.findIndex((row) => row.id === itemId);
+      if (index < 0) return prev;
+      const nextIndex = index + direction;
+      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(index, 1);
+      next.splice(nextIndex, 0, moved);
+      return next;
+    });
+  };
   const buildFavoriteViewTarget = (id: string, title: string, subtitle: string): CommandPaletteRecentItem | null => {
     const targetId = String(id || "").trim();
     if (!targetId) return null;
@@ -5412,7 +5424,7 @@ export function App(): JSX.Element {
     const match = String(item.title || "").match(/^[^:]+:\s*(.+)$/);
     return match ? match[1] : String(item.title || "");
   };
-  const renderWorkspaceFavoriteChip = (item: CommandPaletteItem): JSX.Element => (
+  const renderWorkspaceFavoriteChip = (item: CommandPaletteItem, index: number, total: number): JSX.Element => (
     <span
       key={"workspace_favorite_" + item.id}
       className="so-kbd"
@@ -5420,6 +5432,32 @@ export function App(): JSX.Element {
     >
       <button type="button" className="inline-link" onClick={() => item.run()}>
         {formatWorkspaceFavoriteLabel(item)}
+      </button>
+      <button
+        type="button"
+        className="inline-link"
+        disabled={index <= 0}
+        title={"Move left " + item.title}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          moveFavoriteTarget(item.id, -1);
+        }}
+        onPointerDown={(ev) => ev.stopPropagation()}
+      >
+        {"<"}
+      </button>
+      <button
+        type="button"
+        className="inline-link"
+        disabled={index >= total - 1}
+        title={"Move right " + item.title}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          moveFavoriteTarget(item.id, 1);
+        }}
+        onPointerDown={(ev) => ev.stopPropagation()}
+      >
+        {">"}
       </button>
       <button
         type="button"
@@ -6640,7 +6678,7 @@ export function App(): JSX.Element {
                   <div className="composer-actions">
                     {quickAccessMode === "recent"
                       ? visibleQuickAccessItems.map((item) => renderWorkspaceRecentChip(item))
-                      : visibleQuickAccessItems.map((item) => renderWorkspaceFavoriteChip(item))}
+                      : visibleQuickAccessItems.map((item, index) => renderWorkspaceFavoriteChip(item, index, visibleQuickAccessItems.length))}
                   </div>
                 ) : (
                   <div className="so-muted">{quickAccessMode === "recent" ? "No recent targets in this workspace" : "No favorites pinned in this workspace"}</div>

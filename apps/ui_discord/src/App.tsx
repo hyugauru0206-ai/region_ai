@@ -5354,16 +5354,20 @@ export function App(): JSX.Element {
     }
     return null;
   };
-  const commandPaletteFavoriteItems = useMemo(() => {
-    const q = commandPaletteQuery.trim().toLowerCase();
+  const workspaceFavoriteItems = useMemo(() => {
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
     return commandPaletteFavorites
       .map((item) => resolveStoredFavoriteItem(item, itemMap))
       .filter((item): item is CommandPaletteItem => !!item)
       .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
+      .slice(0, 6);
+  }, [commandPaletteFavorites, commandPaletteItems, orgAgents]);
+  const commandPaletteFavoriteItems = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    return workspaceFavoriteItems
       .filter((item) => !q || ((item.title + " " + item.subtitle).toLowerCase().includes(q)))
       .slice(0, 6);
-  }, [commandPaletteFavorites, commandPaletteItems, commandPaletteQuery, orgAgents]);
+  }, [commandPaletteQuery, workspaceFavoriteItems]);
   const isFavoriteTarget = (itemId: string): boolean => favoriteTargetIds.has(itemId);
   const renderFavoriteToggleButton = (item: CommandPaletteRecentItem | null, label: string): JSX.Element | null => {
     if (!item) return null;
@@ -5384,6 +5388,33 @@ export function App(): JSX.Element {
       </button>
     );
   };
+  const formatWorkspaceFavoriteLabel = (item: Pick<CommandPaletteItem, "title">): string => {
+    const match = String(item.title || "").match(/^[^:]+:\s*(.+)$/);
+    return match ? match[1] : String(item.title || "");
+  };
+  const renderWorkspaceFavoriteChip = (item: CommandPaletteItem): JSX.Element => (
+    <span
+      key={"workspace_favorite_" + item.id}
+      className="so-kbd"
+      title={item.title + " | " + item.subtitle}
+    >
+      <button type="button" className="inline-link" onClick={() => item.run()}>
+        {formatWorkspaceFavoriteLabel(item)}
+      </button>
+      <button
+        type="button"
+        className="inline-link"
+        title={"Unpin " + item.title}
+        onClick={(ev) => {
+          ev.stopPropagation();
+          toggleFavoriteTarget(item);
+        }}
+        onPointerDown={(ev) => ev.stopPropagation()}
+      >
+        x
+      </button>
+    </span>
+  );
   const commandPaletteRecentItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
@@ -6556,6 +6587,19 @@ export function App(): JSX.Element {
               <div className="so-header">
                 <strong>Control Room</strong>
                 <span className={`dashboard-badge ${officeConnectionMode === "LIVE" ? "status-ok" : (officeConnectionMode === "POLL" ? "status-warn" : "status-err")}`}>{officeConnectionMode}</span>
+              </div>
+              <div className="so-card">
+                <div className="row-head">
+                  <strong>Favorites</strong>
+                  <span className="so-muted">{workspaceFavoriteItems.length ? (workspaceFavoriteItems.length + " pinned") : "workspace scoped"}</span>
+                </div>
+                {workspaceFavoriteItems.length ? (
+                  <div className="composer-actions">
+                    {workspaceFavoriteItems.map((item) => renderWorkspaceFavoriteChip(item))}
+                  </div>
+                ) : (
+                  <div className="so-muted">No favorites pinned in this workspace</div>
+                )}
               </div>
               <div className="office-grid">
                 <div className="so-card">

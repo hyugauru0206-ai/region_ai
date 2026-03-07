@@ -1,4 +1,4 @@
-﻿import { FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, PointerEvent as ReactPointerEvent, ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 type ChannelId = "general" | "codex" | "chatgpt" | "external" | "runs" | "recipes" | "designs" | "settings" | "inbox" | "drafts" | "members" | "activity" | "workspace" | "dashboard" | "office" | "debate";
 type Thread = { id: string; title: string; updated_at: string };
@@ -961,8 +961,8 @@ const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "dashboard", label: "ダッシュボード" },
   { id: "office", label: "office" },
   { id: "debate", label: "debate" },
-  { id: "members", label: "繝｡繝ｳ繝舌・" },
-  { id: "activity", label: "繧｢繧ｯ繝・ぅ繝薙ユ繧｣" },
+  { id: "members", label: "メンバー" },
+  { id: "activity", label: "アクティビティ" },
 ];
 const PRIMARY_NAVS = [
   { id: "autopilot", label: "Autopilot", icon: "A", description: "Open dashboard autopilot actions" },
@@ -980,7 +980,7 @@ const DESKTOP_SETTINGS_DEFAULT: DesktopSettings = {
   mention: {
     enabled: true,
     tokens: ["@shogun", "@karo", "@ashigaru", "@codex", "@chatgpt"],
-    aliases: { "蟆・ｻ・: "@shogun", "螳ｶ閠・: "@karo" },
+    aliases: { "将軍": "@shogun", "家老": "@karo" },
     priority_throttle_sec: 5,
     normal_throttle_sec: 30,
   },

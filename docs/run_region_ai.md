@@ -1,4 +1,4 @@
-﻿# region_ai Runbook
+# region_ai Runbook
 
 ## Specification SSOT
 - Platform-level spec SSOT: `docs/spec_region_ai.md`
@@ -133,10 +133,10 @@
     - `ui_smoke` adds `offline_mode=true` and `skipped_steps=[...]` in JSON while keeping legacy `*_ok` keys.
     - After moving to a machine that can reach `github.com:443`, rerun smoke/gate without offline mode for full validation.
 - UI channels (additive):
-  - `#繝｡繝ｳ繝舌・`: org agents registry (status / assigned thread edit)
+  - `#メンバー`: org agents registry (status / assigned thread edit)
     - includes `Memory` panel (episodes/knowledge/procedures browse/search/append)
-  - `#繧｢繧ｯ繝・ぅ繝薙ユ繧｣`: global activity timeline
-  - `#繝ｯ繝ｼ繧ｯ繧ｹ繝壹・繧ｹ`: 2.5D room view for agents/activity with drag-drop seat layout editing
+  - `#アクティビティ`: global activity timeline
+  - `#ワークスペース`: 2.5D room view for agents/activity with drag-drop seat layout editing
     - each agent seat has one-click `Heartbeat` action (append + jump to member memory)
     - each agent seat also has one-click `ステータス` to open right-pane `キャラシート`
   - `#ダッシュボード`: daily loop single-screen status (heartbeat/suggest/consolidation/morning_brief/inbox) + run-now controls
@@ -294,7 +294,7 @@
   - `workspace/ui/org/agents.json` includes optional `agents[].identity`:
     - `tagline`, `values[]`, `speaking_style`, `strengths[]`, `weaknesses[]`, `do[]`, `dont[]`, `focus`
   - `workspace/ui/org/agent_presets.json` stores fixed preset sets (`standard|harsh_critic|strong_jester|ops_first|research_first`)
-  - `#繝｡繝ｳ繝舌・` channel supports identity editing and save via `POST /api/org/agents`
+  - `#メンバー` channel supports identity editing and save via `POST /api/org/agents`
   - identity presets v2.9:
     - `GET /api/org/agent_presets` lists preset sets
     - `GET /api/org/active_profile` returns current council active profile state (workspace SSOT, fail-closed to default)
@@ -474,9 +474,9 @@
 
 ### Gate failure quick examples
 - `gate_failed_summary: design_not_found:<path>`  
-  Cause: `-DesignPath` 縺御ｸ肴ｭ｣縲√∪縺溘・ `LATEST.txt` 縺ｮ蜿ら・蜈医′蟄伜惠縺励↑縺・・- `gate_failed_summary: missing_review_files:design_<id>__reviewer.md,...`  
-  Cause: 蠢・・eview繝輔ぃ繧､繝ｫ・・eviewer/qa/researcher・峨′蜻ｽ蜷崎ｦ丞援縺ｩ縺翫ｊ縺ｫ蟄伜惠縺励↑縺・・- `gate_failed_summary: ... mermaid_missing ... discussion_summary_missing ...`  
-  Cause: design doc 縺ｮ蠢・医そ繧ｯ繧ｷ繝ｧ繝ｳ縺御ｸ崎ｶｳ・・Design diagram`/`Discussion summary` 縺ｪ縺ｩ・峨・
+  Cause: `-DesignPath` points to a missing file, or `docs/design/LATEST.txt` points to a missing design.
+  Cause: required review files (`reviewer/qa/researcher`) are missing or misnamed.
+  Cause: the design doc is missing required sections such as `Design diagram` or `Discussion summary`.
 ## Typical flow (gate required)
 - Default `e2e:auto*` scripts run `tools/run_e2e.ps1` without `-SkipDesignGate`.
 - `run_e2e.ps1` resolves design from `docs/design/LATEST.txt` unless `-DesignPath` is explicitly passed.
@@ -499,9 +499,9 @@
 ## External AI participation
 | mode | policy | gate expectation |
 |---|---|---|
-| `none` | external review荳崎ｦ√ＡReviewer/QA/Researcher`縺ｮ縺ｿ縲・| external evidence file is not required. |
-| `optional` | 蜿ｯ閭ｽ縺ｪ繧・`__external_claude.md` / `__external_gemini.md` 繧剃ｻ倅ｸ弱・| evidence optional; policy declaration required in design. |
-| `required` | external evidence 繝輔ぃ繧､繝ｫ繧貞ｿ・亥喧縲・| missing evidence fails gate. |
+| `none` | external review is not used; only `Reviewer/QA/Researcher` files are required. | external evidence file is not required. |
+| `optional` | optional external files such as `__external_claude.md` / `__external_gemini.md` may be added. | evidence optional; policy declaration required in design. |
+| `required` | external evidence files are required. | missing evidence fails gate. |
 
 ## Review file naming rules
 - Correct:
@@ -509,8 +509,8 @@
   - `docs/design/design_<id>__qa.md`
   - `docs/design/design_<id>__researcher.md`
 - Incorrect examples:
-  - `docs/design/design_<id>_reviewer.md` (underscore 1縺､荳崎ｶｳ)
-  - `docs/design/design_<id>__reviewer.txt` (諡｡蠑ｵ蟄蝉ｸ肴ｭ｣)
+  - `docs/design/design_<id>_reviewer.md` (single underscore)
+  - `docs/design/design_<id>__reviewer.txt` (wrong extension)
 - Gate behavior when broken:
   - `gate_failed_summary: missing_review_files:...`
 

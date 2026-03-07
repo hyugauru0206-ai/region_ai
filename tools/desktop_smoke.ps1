@@ -30,6 +30,54 @@ $result = [ordered]@{
   exit_code = 1
 }
 
+function Get-RegionUiStaticContent {
+  param(
+    [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+    [Parameter(Mandatory = $true)][string]$RepoRoot
+  )
+
+  $builtUiDir = Join-Path $WorkspaceRoot "._ui_build_dist\\ui_discord"
+  if (Test-Path -LiteralPath $builtUiDir) {
+    $files = @(Get-ChildItem -LiteralPath $builtUiDir -Recurse -File -Include *.html, *.js, *.css -ErrorAction SilentlyContinue)
+    if ($files.Count -gt 0) {
+      $text = ($files | ForEach-Object {
+        try { Get-Content -LiteralPath $_.FullName -Raw -ErrorAction Stop } catch { "" }
+      }) -join [Environment]::NewLine
+      return [ordered]@{
+        source = "built_ui_dist"
+        text = $text
+      }
+    }
+  }
+
+  $appPath = Join-Path $RepoRoot "apps\\ui_discord\\src\\App.tsx"
+  if (Test-Path -LiteralPath $appPath) {
+    return [ordered]@{
+      source = "app_tsx"
+      text = (Get-Content -LiteralPath $appPath -Raw)
+    }
+  }
+
+  return [ordered]@{
+    source = "missing"
+    text = ""
+  }
+}
+
+function Test-ContainsAllMarkers {
+  param(
+    [Parameter(Mandatory = $true)][string]$Text,
+    [Parameter(Mandatory = $true)][string[]]$Markers
+  )
+
+  foreach ($marker in $Markers) {
+    if ($Text.IndexOf($marker, [System.StringComparison]::OrdinalIgnoreCase) -lt 0) {
+      return $false
+    }
+  }
+  return $true
+}
+
 try {
   if ($env:REGION_AI_SKIP_DESKTOP -eq "1") {
     $result.skipped = $true
@@ -75,6 +123,33 @@ try {
           if ($LASTEXITCODE -ne 0) { throw "desktop_main_syntax_failed" }
           & node --check (Join-Path $desktopDir "preload.cjs")
           if ($LASTEXITCODE -ne 0) { throw "desktop_preload_syntax_failed" }
+          $regionUiStatic = Get-RegionUiStaticContent -WorkspaceRoot $WorkspaceRoot -RepoRoot $repoRoot
+          if ([string]::IsNullOrWhiteSpace([string]$regionUiStatic.text)) {
+            throw "desktop_region_ui_static_missing"
+          }
+          $result.quick_access_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+            "Control Room",
+            "Quick Access",
+            "Office Canvas",
+            "Favorites",
+            "Recent",
+            "Collapse"
+          )
+          $result.command_palette_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+            "Command Palette",
+            "Ctrl+K",
+            "View: Office",
+            "View: Debate",
+            "View: Dashboard"
+          )
+          $result.office_debate_nav_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+            "Open control room office view",
+            "Open discussion stage view",
+            "Debate Stage"
+          )
+          if (-not $result.quick_access_ok) { throw ("desktop_region_ui_quick_access_static_failed:" + [string]$regionUiStatic.source) }
+          if (-not $result.command_palette_ok) { throw ("desktop_region_ui_command_palette_static_failed:" + [string]$regionUiStatic.source) }
+          if (-not $result.office_debate_nav_ok) { throw ("desktop_region_ui_navigation_static_failed:" + [string]$regionUiStatic.source) }
           $result.mode = "local_static_fallback"
           $result.desktop_passed = $true
           $result.exit_code = 0

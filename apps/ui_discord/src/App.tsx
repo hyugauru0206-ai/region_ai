@@ -1047,7 +1047,9 @@ function readStoredTargetEntries(key: string, maxItems = 8): CommandPaletteRecen
   }
 }
 
-function readStoredCommandPaletteRecent(): CommandPaletteRecentItem[] {
+function readStoredCommandPaletteRecent(storageKey: string, fallbackToLegacy = false): CommandPaletteRecentItem[] {
+  const scoped = readStoredTargetEntries(storageKey, 8);
+  if (scoped.length > 0 || !fallbackToLegacy) return scoped;
   return readStoredTargetEntries(RECENT_TARGETS_STORAGE_KEY, 8);
 }
 
@@ -1082,6 +1084,10 @@ function resolveOfficeWorkspaceKey(): string {
 
 function getOfficeLayoutStorageKey(workspaceKey: string): string {
   return `${OFFICE_LAYOUT_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
+function getRecentTargetsStorageKey(workspaceKey: string): string {
+  return `${RECENT_TARGETS_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
 }
 
 function getFavoriteTargetsStorageKey(workspaceKey: string): string {
@@ -1422,7 +1428,7 @@ export function App(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState("");
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
-  const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent());
+  const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent(getRecentTargetsStorageKey(resolveOfficeWorkspaceKey()), true));
   const [commandPaletteFavorites, setCommandPaletteFavorites] = useState<CommandPaletteRecentItem[]>(() => readStoredTargetEntries(getFavoriteTargetsStorageKey(resolveOfficeWorkspaceKey()), 6));
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
   const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
@@ -4612,10 +4618,19 @@ export function App(): JSX.Element {
   }, [uiEffects]);
 
   useEffect(() => {
+    const nextRecent = readStoredCommandPaletteRecent(recentTargetsStorageKey, true);
+    setCommandPaletteRecent((prev) => {
+      const prevJson = JSON.stringify(prev);
+      const nextJson = JSON.stringify(nextRecent);
+      return prevJson === nextJson ? prev : nextRecent;
+    });
+  }, [recentTargetsStorageKey]);
+
+  useEffect(() => {
     try {
-      localStorage.setItem(RECENT_TARGETS_STORAGE_KEY, JSON.stringify(commandPaletteRecent.slice(0, 8)));
+      localStorage.setItem(recentTargetsStorageKey, JSON.stringify(commandPaletteRecent.slice(0, 8)));
     } catch {}
-  }, [commandPaletteRecent]);
+  }, [commandPaletteRecent, recentTargetsStorageKey]);
 
   useEffect(() => {
     const nextFavorites = readStoredTargetEntries(favoriteTargetsStorageKey, 6);
@@ -5111,6 +5126,7 @@ export function App(): JSX.Element {
 
   const officeWorkspaceKey = resolveOfficeWorkspaceKey();
   const officeLayoutStorageKey = getOfficeLayoutStorageKey(officeWorkspaceKey);
+  const recentTargetsStorageKey = getRecentTargetsStorageKey(officeWorkspaceKey);
   const favoriteTargetsStorageKey = getFavoriteTargetsStorageKey(officeWorkspaceKey);
 
   const filteredRuns = runs.filter((r) => r.run_id.includes(runFilter));

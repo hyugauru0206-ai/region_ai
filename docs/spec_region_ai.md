@@ -1,4 +1,4 @@
-﻿# region_ai Spec (SSOT)
+# region_ai Spec (SSOT)
 
 This document is the platform-level SSOT for region_ai behavior and contracts.
 For Task/Result field-level detail, see `docs/spec_task_result.md`.
@@ -334,7 +334,9 @@ For Task/Result field-level detail, see `docs/spec_task_result.md`.
     - sheet memory snapshot uses existing memory APIs only (`/api/memory/:agent_id/:category?limit=...`) with no new backend endpoint.
   - UI Polish v1 policy (Star Office + Agent HQ inspirations):
     - scope is UI-only; backend API contracts stay unchanged.
-    - Discord-like navigation and existing routes are preserved (`chat`, `workspace`, `dashboard`, `inbox thread`, `character-sheet`).
+    - chat remains the primary surface; right pane remains the detail surface for `character-sheet`, inbox thread, tracker detail, and export payload views.
+    - existing routes are preserved and expanded with `office` (ControlRoom) and `debate` alongside `chat`, `workspace`, `dashboard`, `inbox thread`, and `character-sheet`.
+    - command palette is a one-step navigation surface for the current workspace state, with workspace-scoped favorites and shared recent target history.
     - right-pane/dashboard/workspace apply unified card/badge/mono-wrap styling to improve readability under long IDs/snippets/JSON.
 - Council autopilot runtime state:
   - `workspace/ui/council/runs/<run_id>.json` (status snapshot)

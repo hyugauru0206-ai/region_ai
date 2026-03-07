@@ -946,6 +946,7 @@ const UI_EFFECTS_STORAGE_KEY = "regionai.ui.effects.v1";
 const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
 const RECENT_TARGETS_STORAGE_KEY = "region_ai.command_palette_recent.v1";
 const FAVORITE_TARGETS_STORAGE_KEY = "region_ai.favorites.v1";
+const QUICK_ACCESS_MODE_STORAGE_KEY = "region_ai.quick_access_mode.v1";
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1092,6 +1093,10 @@ function getRecentTargetsStorageKey(workspaceKey: string): string {
 
 function getFavoriteTargetsStorageKey(workspaceKey: string): string {
   return `${FAVORITE_TARGETS_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
+function getQuickAccessModeStorageKey(workspaceKey: string): string {
+  return `${QUICK_ACCESS_MODE_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
 }
 
 function formatCompactTargetId(prefix: string, value: unknown, keep = 8): string {
@@ -1430,6 +1435,10 @@ export function App(): JSX.Element {
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent(getRecentTargetsStorageKey(resolveOfficeWorkspaceKey()), true));
   const [commandPaletteFavorites, setCommandPaletteFavorites] = useState<CommandPaletteRecentItem[]>(() => readStoredTargetEntries(getFavoriteTargetsStorageKey(resolveOfficeWorkspaceKey()), 6));
+  const [quickAccessMode, setQuickAccessMode] = useState<"favorites" | "recent">(() => {
+    const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(resolveOfficeWorkspaceKey())) || "").trim().toLowerCase();
+    return raw === "recent" ? "recent" : "favorites";
+  });
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
   const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
     const raw = String(localStorage.getItem(UI_EFFECTS_STORAGE_KEY) || "").trim();
@@ -4648,6 +4657,17 @@ export function App(): JSX.Element {
   }, [commandPaletteFavorites, favoriteTargetsStorageKey]);
 
   useEffect(() => {
+    const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(officeWorkspaceKey)) || "").trim().toLowerCase();
+    setQuickAccessMode(raw === "recent" ? "recent" : "favorites");
+  }, [officeWorkspaceKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(getQuickAccessModeStorageKey(officeWorkspaceKey), quickAccessMode);
+    } catch {}
+  }, [officeWorkspaceKey, quickAccessMode]);
+
+  useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
     const scopedOrder = readStoredStringArray(officeLayoutStorageKey);
     const legacyOrder = readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY);
@@ -5412,6 +5432,26 @@ export function App(): JSX.Element {
         onPointerDown={(ev) => ev.stopPropagation()}
       >
         x
+      </button>
+    </span>
+  );
+  const workspaceRecentItems = useMemo(() => {
+    const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
+    return commandPaletteRecent
+      .map((item) => itemMap.get(item.id))
+      .filter((item): item is CommandPaletteItem => !!item)
+      .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
+      .slice(0, 8);
+  }, [commandPaletteItems, commandPaletteRecent]);
+  const visibleQuickAccessItems = quickAccessMode === "recent" ? workspaceRecentItems : workspaceFavoriteItems;
+  const renderWorkspaceRecentChip = (item: CommandPaletteItem): JSX.Element => (
+    <span
+      key={"workspace_recent_" + item.id}
+      className="so-kbd"
+      title={item.title + " | " + item.subtitle}
+    >
+      <button type="button" className="inline-link" onClick={() => item.run()}>
+        {formatWorkspaceFavoriteLabel(item)}
       </button>
     </span>
   );
@@ -6590,15 +6630,20 @@ export function App(): JSX.Element {
               </div>
               <div className="so-card">
                 <div className="row-head">
-                  <strong>Favorites</strong>
-                  <span className="so-muted">{workspaceFavoriteItems.length ? (workspaceFavoriteItems.length + " pinned") : "workspace scoped"}</span>
-                </div>
-                {workspaceFavoriteItems.length ? (
+                  <strong>Quick Access</strong>
                   <div className="composer-actions">
-                    {workspaceFavoriteItems.map((item) => renderWorkspaceFavoriteChip(item))}
+                    <button type="button" className={quickAccessMode === "favorites" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "favorites"} onClick={() => setQuickAccessMode("favorites")}>Favorites</button>
+                    <button type="button" className={quickAccessMode === "recent" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "recent"} onClick={() => setQuickAccessMode("recent")}>Recent</button>
+                  </div>
+                </div>
+                {visibleQuickAccessItems.length ? (
+                  <div className="composer-actions">
+                    {quickAccessMode === "recent"
+                      ? visibleQuickAccessItems.map((item) => renderWorkspaceRecentChip(item))
+                      : visibleQuickAccessItems.map((item) => renderWorkspaceFavoriteChip(item))}
                   </div>
                 ) : (
-                  <div className="so-muted">No favorites pinned in this workspace</div>
+                  <div className="so-muted">{quickAccessMode === "recent" ? "No recent targets in this workspace" : "No favorites pinned in this workspace"}</div>
                 )}
               </div>
               <div className="office-grid">

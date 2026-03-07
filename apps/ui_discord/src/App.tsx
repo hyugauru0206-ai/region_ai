@@ -1446,6 +1446,7 @@ export function App(): JSX.Element {
     return raw === "recent" ? "recent" : "favorites";
   });
   const [quickAccessFavoritesExpanded, setQuickAccessFavoritesExpanded] = useState(false);
+  const [quickAccessRecentExpanded, setQuickAccessRecentExpanded] = useState(false);
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
   const [uiEffects, setUiEffects] = useState<UiEffects>(() => {
     const raw = String(localStorage.getItem(UI_EFFECTS_STORAGE_KEY) || "").trim();
@@ -4667,6 +4668,7 @@ export function App(): JSX.Element {
     const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(officeWorkspaceKey)) || "").trim().toLowerCase();
     setQuickAccessMode(raw === "recent" ? "recent" : "favorites");
     setQuickAccessFavoritesExpanded(false);
+    setQuickAccessRecentExpanded(false);
   }, [officeWorkspaceKey]);
 
   useEffect(() => {
@@ -5509,6 +5511,8 @@ export function App(): JSX.Element {
   const visibleQuickAccessItems = quickAccessMode === "recent" ? workspaceRecentItems : workspaceFavoriteItems;
   const visibleQuickAccessFavorites = quickAccessFavoritesExpanded ? workspaceFavoriteItems : workspaceFavoriteItems.slice(0, 3);
   const hiddenQuickAccessFavoritesCount = Math.max(0, workspaceFavoriteItems.length - visibleQuickAccessFavorites.length);
+  const visibleQuickAccessRecent = quickAccessRecentExpanded ? workspaceRecentItems : workspaceRecentItems.slice(0, 3);
+  const hiddenQuickAccessRecentCount = Math.max(0, workspaceRecentItems.length - visibleQuickAccessRecent.length);
   const renderWorkspaceRecentChip = (item: CommandPaletteItem): JSX.Element => (
     <span
       key={"workspace_recent_" + item.id}
@@ -6705,13 +6709,20 @@ export function App(): JSX.Element {
                   <>
                     <div className="composer-actions">
                       {quickAccessMode === "recent"
-                        ? visibleQuickAccessItems.map((item) => renderWorkspaceRecentChip(item))
+                        ? visibleQuickAccessRecent.map((item) => renderWorkspaceRecentChip(item))
                         : visibleQuickAccessFavorites.map((item, index) => renderWorkspaceFavoriteChip(item, index, workspaceFavoriteItems.length))}
                     </div>
                     {quickAccessMode === "favorites" && workspaceFavoriteItems.length > 3 ? (
                       <div className="composer-actions">
                         <button type="button" className="inline-link" onClick={() => setQuickAccessFavoritesExpanded((prev) => !prev)}>
                           {quickAccessFavoritesExpanded ? "Collapse" : ("+" + hiddenQuickAccessFavoritesCount + " more")}
+                        </button>
+                      </div>
+                    ) : null}
+                    {quickAccessMode === "recent" && workspaceRecentItems.length > 3 ? (
+                      <div className="composer-actions">
+                        <button type="button" className="inline-link" onClick={() => setQuickAccessRecentExpanded((prev) => !prev)}>
+                          {quickAccessRecentExpanded ? "Collapse" : ("+" + hiddenQuickAccessRecentCount + " more")}
                         </button>
                       </div>
                     ) : null}

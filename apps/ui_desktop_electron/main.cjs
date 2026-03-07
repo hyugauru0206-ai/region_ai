@@ -839,6 +839,133 @@ async function handleDeepLink(payloadInput) {
   return { ok: true, target, post_ok: !!posted.ok };
 }
 
+async function waitForRegionViewReady(timeoutMs = 8000) {
+  const deadline = Date.now() + Math.max(1000, Number(timeoutMs) || 0);
+  while (Date.now() < deadline) {
+    if (regionView && regionView.webContents && !regionView.webContents.isDestroyed()) {
+      try {
+        const readyState = await regionView.webContents.executeJavaScript("document.readyState", true);
+        if (readyState === "interactive" || readyState === "complete") {
+          return true;
+        }
+      } catch {}
+    }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  return false;
+}
+
+async function probeRegionUiSmoke() {
+  if (!regionView || !regionView.webContents || regionView.webContents.isDestroyed()) {
+    return { ok: false, reason: "region_view_missing" };
+  }
+  const favoritesSeed = [
+    { id: "debate", title: "View: Debate", subtitle: "Open discussion stage view" },
+    { id: "office", title: "View: Office", subtitle: "Open control room office view" },
+    { id: "dashboard", title: "View: Dashboard", subtitle: "Open daily loop dashboard" },
+    { id: "workspace", title: "View: Workspace", subtitle: "Open workspace room" },
+  ];
+  const recentSeed = [
+    { id: "office", title: "View: Office", subtitle: "Open control room office view" },
+    { id: "debate", title: "View: Debate", subtitle: "Open discussion stage view" },
+    { id: "dashboard", title: "View: Dashboard", subtitle: "Open daily loop dashboard" },
+    { id: "workspace", title: "View: Workspace", subtitle: "Open workspace room" },
+  ];
+  try {
+    const ready = await waitForRegionViewReady(10000);
+    if (!ready) {
+      return { ok: false, reason: "region_ui_not_ready" };
+    }
+    const seedScript =
+      "(function(){try{" +
+      "localStorage.setItem('region_ai.favorites.v1.default'," + JSON.stringify(JSON.stringify(favoritesSeed)) + ");" +
+      "localStorage.setItem('region_ai.command_palette_recent.v1.default'," + JSON.stringify(JSON.stringify(recentSeed)) + ");" +
+      "localStorage.setItem('region_ai.quick_access_mode.v1.default','favorites');" +
+      "return { ok: true };}catch(e){return { ok: false, reason: String(e && e.message ? e.message : e) };}})();";
+    const seeded = await regionView.webContents.executeJavaScript(seedScript, true);
+    if (!seeded || !seeded.ok) {
+      return { ok: false, reason: String(seeded && seeded.reason ? seeded.reason : "seed_failed") };
+    }
+    regionView.webContents.reloadIgnoringCache();
+    const reloaded = await waitForRegionViewReady(10000);
+    if (!reloaded) {
+      return { ok: false, reason: "region_ui_reload_timeout" };
+    }
+    const probeScript =
+      '(async function () {' +
+      'const wait = (ms) => new Promise((resolve) => setTimeout(resolve, ms));' +
+      'const textOf = (node) => String((node && node.textContent) || "").replace(/\\s+/g, " ").trim();' +
+      'const findButton = (label) => Array.from(document.querySelectorAll("button")).find((node) => textOf(node) === label) || null;' +
+      'const bodyHas = (text) => textOf(document.body).includes(text);' +
+      'const storageKey = "region_ai.quick_access_mode.v1.default";' +
+      'const clickAndWait = async (node) => { if (!node) return false; node.click(); await wait(120); return true; };' +
+      'const readPressed = (label) => { const node = findButton(label); return node ? node.getAttribute("aria-pressed") === "true" : false; };' +
+      'const readOverflowLabel = () => { const node = Array.from(document.querySelectorAll("button.inline-link")).find((item) => { const text = textOf(item); return text === "Collapse" || /^\\+\\d+ more$/.test(text); }) || null; return node ? textOf(node) : ""; };' +
+      'const openPalette = async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "k", ctrlKey: true, bubbles: true })); await wait(120); return bodyHas("Command Palette"); };' +
+      'const closePalette = async () => { window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true })); await wait(80); };' +
+      'const officeButton = findButton("Office");' +
+      'if (!(await clickAndWait(officeButton))) { return { ok: false, reason: "office_button_missing" }; }' +
+      'const officeOk = bodyHas("Control Room") && bodyHas("Quick Access") && bodyHas("Office Canvas");' +
+      'const favoritesButton = findButton("Favorites");' +
+      'const recentButton = findButton("Recent");' +
+      'if (!officeOk || !favoritesButton || !recentButton) { return { ok: false, reason: "quick_access_surface_missing" }; }' +
+      'const favoritesCollapsedOk = readOverflowLabel() === "+1 more";' +
+      'const favoritesOverflowToggle = Array.from(document.querySelectorAll("button.inline-link")).find((node) => /^\\+\\d+ more$/.test(textOf(node))) || null;' +
+      'if (favoritesOverflowToggle) { await clickAndWait(favoritesOverflowToggle); }' +
+      'const favoritesExpandedOk = readOverflowLabel() === "Collapse";' +
+      'await clickAndWait(recentButton);' +
+      'const recentModeOk = readPressed("Recent");' +
+      'const recentStorageOk = localStorage.getItem(storageKey) === "recent";' +
+      'const recentCollapsedOk = readOverflowLabel() === "+1 more";' +
+      'const recentOverflowToggle = Array.from(document.querySelectorAll("button.inline-link")).find((node) => /^\\+\\d+ more$/.test(textOf(node))) || null;' +
+      'if (recentOverflowToggle) { await clickAndWait(recentOverflowToggle); }' +
+      'const recentExpandedOk = readOverflowLabel() === "Collapse";' +
+      'window.location.reload();' +
+      'await wait(350);' +
+      'await clickAndWait(findButton("Office"));' +
+      'const restoredRecentOk = readPressed("Recent");' +
+      'await clickAndWait(findButton("Favorites"));' +
+      'const favoritesModeOk = readPressed("Favorites");' +
+      'const favoritesStorageOk = localStorage.getItem(storageKey) === "favorites";' +
+      'window.dispatchEvent(new KeyboardEvent("keydown", { key: "1", altKey: true, bubbles: true }));' +
+      'await wait(160);' +
+      'const favoriteShortcutOk = bodyHas("Debate Stage");' +
+      'await clickAndWait(findButton("Office"));' +
+      'const officeReturnOk = bodyHas("Control Room") && bodyHas("Office Canvas");' +
+      'const paletteOpened = await openPalette();' +
+      'const paletteViewsOk = paletteOpened && bodyHas("View: Office") && bodyHas("View: Debate") && bodyHas("View: Dashboard");' +
+      'await closePalette();' +
+      'await clickAndWait(findButton("Debate"));' +
+      'const debateOk = bodyHas("Debate Stage");' +
+      'await clickAndWait(findButton("Office"));' +
+      'const officeDebateNavOk = debateOk && bodyHas("Control Room") && bodyHas("Office Canvas");' +
+      'return {' +
+      'ok: officeOk && favoritesModeOk && favoritesCollapsedOk && favoritesExpandedOk && recentModeOk && recentCollapsedOk && recentExpandedOk && restoredRecentOk && favoriteShortcutOk && officeReturnOk && paletteViewsOk && officeDebateNavOk,' +
+      'quick_access_ok: officeOk && favoritesModeOk && recentModeOk && favoritesCollapsedOk && favoritesExpandedOk && recentCollapsedOk && recentExpandedOk && restoredRecentOk,' +
+      'command_palette_ok: paletteViewsOk,' +
+      'office_debate_nav_ok: officeDebateNavOk,' +
+      'quick_access_mode_storage_ok: recentStorageOk && favoritesStorageOk,' +
+      'favorite_shortcut_ok: favoriteShortcutOk' +
+      '};' +
+      '})();';
+    const probed = await regionView.webContents.executeJavaScript(probeScript, true);
+    if (!probed || !probed.ok) {
+      return {
+        ok: false,
+        reason: String(probed && probed.reason ? probed.reason : "probe_failed"),
+        quick_access_ok: !!(probed && probed.quick_access_ok),
+        command_palette_ok: !!(probed && probed.command_palette_ok),
+        office_debate_nav_ok: !!(probed && probed.office_debate_nav_ok),
+        quick_access_mode_storage_ok: !!(probed && probed.quick_access_mode_storage_ok),
+        favorite_shortcut_ok: !!(probed && probed.favorite_shortcut_ok),
+      };
+    }
+    return probed;
+  } catch (e) {
+    return { ok: false, reason: String(e && e.message ? e.message : e) };
+  }
+}
+
 async function pasteToChat(preferredText) {
   const chatView = getActiveChatView();
   if (!chatView) return { ok: false, mode: "no_view" };
@@ -2028,6 +2155,15 @@ async function runSmokeSelfTest() {
     let hotReloadOk = false;
     let roleTabsOk = false;
     let councilCycleOk = false;
+    let regionUiSmoke = {
+      ok: false,
+      quick_access_ok: false,
+      command_palette_ok: false,
+      office_debate_nav_ok: false,
+      quick_access_mode_storage_ok: false,
+      favorite_shortcut_ok: false,
+      reason: "",
+    };
     try {
       const p = settingsPath();
       const original = readJsonFileSafe(p, defaultDesktopSettingsObj());
@@ -2108,10 +2244,11 @@ async function runSmokeSelfTest() {
     } catch {
       councilCycleOk = false;
     }
-    const passed = !!sent.ok && !!capturedLast.ok;
-    console.log(`[desktop_smoke] ${JSON.stringify({ passed, mode: "test_harness_capture_last", chat_url: CHAT_VIEW_URL, send_mode: sent.mode, capture_mode: capturedLast.mode, text_len: capturedLast.text_len || 0, tray_ready: !!tray, hotkeys_registered: hotkeysRegistered, notify_polling: !!notifyTimer, mention_probe: !!mentionProbe.mention, mention_token: mentionProbe.token || "", hot_reload_ok: hotReloadOk, role_tabs_ok: roleTabsOk, council_cycle_ok: councilCycleOk, inbox_probe_ok: !!inboxProbe.ok, deep_link_ok: deepLinkOk, deep_link_target: deepRun.target, deep_link_post_ok: !!(deepRun.post_ok && deepThread.post_ok && deepInbox.post_ok) })}`);
+    regionUiSmoke = await probeRegionUiSmoke();
+    const passed = !!sent.ok && !!capturedLast.ok && !!regionUiSmoke.ok;
+    console.log(`[desktop_smoke] ${JSON.stringify({ passed, mode: "test_harness_capture_last", chat_url: CHAT_VIEW_URL, send_mode: sent.mode, capture_mode: capturedLast.mode, text_len: capturedLast.text_len || 0, tray_ready: !!tray, hotkeys_registered: hotkeysRegistered, notify_polling: !!notifyTimer, mention_probe: !!mentionProbe.mention, mention_token: mentionProbe.token || "", hot_reload_ok: hotReloadOk, role_tabs_ok: roleTabsOk, council_cycle_ok: councilCycleOk, inbox_probe_ok: !!inboxProbe.ok, deep_link_ok: deepLinkOk, deep_link_target: deepRun.target, deep_link_post_ok: !!(deepRun.post_ok && deepThread.post_ok && deepInbox.post_ok), quick_access_ok: !!regionUiSmoke.quick_access_ok, command_palette_ok: !!regionUiSmoke.command_palette_ok, office_debate_nav_ok: !!regionUiSmoke.office_debate_nav_ok, quick_access_mode_storage_ok: !!regionUiSmoke.quick_access_mode_storage_ok, favorite_shortcut_ok: !!regionUiSmoke.favorite_shortcut_ok, region_ui_reason: regionUiSmoke.reason || "" })}`);
   } catch (e) {
-    console.log(`[desktop_smoke] ${JSON.stringify({ passed: false, mode: "test_harness_capture_last", hot_reload_ok: false, role_tabs_ok: false, council_cycle_ok: false, deep_link_ok: false, error: String(e && e.message ? e.message : e) })}`);
+    console.log(`[desktop_smoke] ${JSON.stringify({ passed: false, mode: "test_harness_capture_last", hot_reload_ok: false, role_tabs_ok: false, council_cycle_ok: false, deep_link_ok: false, quick_access_ok: false, command_palette_ok: false, office_debate_nav_ok: false, quick_access_mode_storage_ok: false, favorite_shortcut_ok: false, error: String(e && e.message ? e.message : e) })}`);
   }
 }
 

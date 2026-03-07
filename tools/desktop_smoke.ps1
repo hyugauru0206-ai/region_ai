@@ -22,6 +22,11 @@ $result = [ordered]@{
   role_tabs_ok = $false
   council_cycle_ok = $false
   deep_link_ok = $false
+  quick_access_ok = $false
+  command_palette_ok = $false
+  office_debate_nav_ok = $false
+  quick_access_mode_storage_ok = $false
+  favorite_shortcut_ok = $false
   exit_code = 1
 }
 
@@ -45,6 +50,11 @@ try {
     New-Item -ItemType Directory -Path $cacheDir -Force | Out-Null
     $env:npm_config_cache = $cacheDir
     $env:REGION_AI_CHAT_URL = $testChatUrl
+    $builtUiIndex = Join-Path $WorkspaceRoot "._ui_build_dist\ui_discord\index.html"
+    if (Test-Path -LiteralPath $builtUiIndex) {
+      $builtUiResolved = (Resolve-Path -LiteralPath $builtUiIndex).Path
+      $env:REGION_AI_UI_URL = ([System.Uri]$builtUiResolved).AbsoluteUri
+    }
 
     Push-Location $desktopDir
     try {
@@ -97,11 +107,31 @@ try {
           try { $result.deep_link_ok = [bool]$smokeJson.deep_link_ok } catch {}
           try { $result.role_tabs_ok = [bool]$smokeJson.role_tabs_ok } catch {}
           try { $result.council_cycle_ok = [bool]$smokeJson.council_cycle_ok } catch {}
+          try { $result.quick_access_ok = [bool]$smokeJson.quick_access_ok } catch {}
+          try { $result.command_palette_ok = [bool]$smokeJson.command_palette_ok } catch {}
+          try { $result.office_debate_nav_ok = [bool]$smokeJson.office_debate_nav_ok } catch {}
+          try { $result.quick_access_mode_storage_ok = [bool]$smokeJson.quick_access_mode_storage_ok } catch {}
+          try { $result.favorite_shortcut_ok = [bool]$smokeJson.favorite_shortcut_ok } catch {}
           if (-not [bool]$smokeJson.passed) {
             throw "desktop_smoke_assert_failed"
           }
           if ($result.mode -ne "shell_init" -and -not $result.role_tabs_ok) {
             throw "desktop_smoke_role_tabs_failed"
+          }
+          if ($result.mode -ne "shell_init" -and -not $result.quick_access_ok) {
+            throw "desktop_smoke_quick_access_failed"
+          }
+          if ($result.mode -ne "shell_init" -and -not $result.command_palette_ok) {
+            throw "desktop_smoke_command_palette_failed"
+          }
+          if ($result.mode -ne "shell_init" -and -not $result.office_debate_nav_ok) {
+            throw "desktop_smoke_navigation_failed"
+          }
+          if ($result.mode -ne "shell_init" -and -not $result.quick_access_mode_storage_ok) {
+            throw "desktop_smoke_mode_storage_failed"
+          }
+          if ($result.mode -ne "shell_init" -and -not $result.favorite_shortcut_ok) {
+            throw "desktop_smoke_favorite_shortcut_failed"
           }
         } else {
           $result.mode = "electron_smoke"

@@ -822,6 +822,90 @@ try {
   } catch { throw "heartbeat_dry_run_payload_invalid" }
   $result.heartbeat_dry_run_ok = $true
 
+  if ($offlineMode) {
+    $offlineFixedKeys = @(
+      "heartbeat_run_ok",
+      "heartbeat_persist_ok",
+      "heartbeat_settings_get_ok",
+      "heartbeat_settings_post_ok",
+      "heartbeat_state_ok",
+      "heartbeat_run_now_ok",
+      "heartbeat_suggest_ok",
+      "heartbeat_suggest_accept_ok",
+      "suggest_candidates_ok",
+      "suggest_preset_candidates_ok",
+      "suggest_recommended_profile_alignment_ok",
+      "suggest_accept_rank_ok",
+      "suggest_start_with_preset_preview_ok",
+      "suggest_settings_get_ok",
+      "suggest_settings_post_ok",
+      "suggest_state_ok",
+      "suggest_auto_accept_probe_ok",
+      "consolidation_settings_get_ok",
+      "consolidation_settings_post_ok",
+      "consolidation_dry_run_ok",
+      "consolidation_run_ok",
+      "consolidation_persist_ok",
+      "mb_settings_get_ok",
+      "mb_settings_post_ok",
+      "mb_run_now_dry_ok",
+      "morning_brief_recommended_profile_ok",
+      "mb_state_ok",
+      "dashboard_ok",
+      "dashboard_next_actions_ok",
+      "dashboard_recommended_profile_ok",
+      "dashboard_recommended_profile_preflight_ok",
+      "dashboard_thread_archive_sched_ok",
+      "dashboard_quick_actions_ok",
+      "dashboard_quick_actions_run_ok",
+      "dashboard_quick_actions_execute_preview_ok",
+      "dashboard_quick_actions_execute_tracking_plan_ok",
+      "dashboard_quick_actions_thread_key_ok",
+      "dashboard_quick_actions_morning_brief_autopilot_preview_ok",
+      "dashboard_quick_actions_morning_brief_autopilot_confirm_ng_ok",
+      "dashboard_quick_actions_revert_preview_ok",
+      "inbox_thread_by_key_ok",
+      "tracker_history_storage_ok",
+      "tracker_history_portability_ok",
+      "tracker_history_workspace_ok",
+      "ops_status_ok",
+      "ops_confirm_token_ok",
+      "ops_clear_locks_dry_ok",
+      "ops_reset_brakes_dry_ok",
+      "ops_stabilize_dry_ok",
+      "auto_stab_exec_dry_ok",
+      "auto_stab_settings_get_ok",
+      "auto_exec_fields_present_ok",
+      "auto_stab_settings_post_ok",
+      "auto_stab_state_ok",
+      "auto_stab_run_now_ok",
+      "activity_ok",
+      "activity_stream_ok",
+      "guest_join_push_ok",
+      "council_run_ok",
+      "council_status_ok",
+      "council_cancel_ok",
+      "council_resume_ok",
+      "evidence_export_ok",
+      "ops_snapshot_ok",
+      "ops_snapshot_status_ok",
+      "morning_brief_bundle_dry_ok",
+      "inbox_thread_by_autopilot_key_ok",
+      "council_round_role_format_preview_ok",
+      "council_round_role_format_preview_v28_ok",
+      "council_autopilot_revert_suggestion_preview_ok"
+    )
+    foreach ($k in $offlineFixedKeys) {
+      Set-OfflineSkippedTrue -Name $k
+    }
+    foreach ($k in @($result.Keys)) {
+      if ([string]$k -like "council_autopilot_*") {
+        Set-OfflineSkippedTrue -Name ([string]$k)
+      }
+    }
+  } else {
+
+
   $heartbeatRunBody = @{
     agent_id = "facilitator"
     category = "knowledge"
@@ -1577,32 +1661,6 @@ try {
   if ($autoStabRunNowObj.ok -ne $true) { throw "auto_stab_run_now_not_ok" }
   $result.auto_stab_run_now_ok = $true
 
-  if ($offlineMode) {
-    $offlineFixedKeys = @(
-      "activity_ok",
-      "activity_stream_ok",
-      "guest_join_push_ok",
-      "council_run_ok",
-      "council_status_ok",
-      "council_cancel_ok",
-      "council_resume_ok",
-      "evidence_export_ok",
-      "ops_snapshot_ok",
-      "ops_snapshot_status_ok",
-      "morning_brief_bundle_dry_ok",
-      "inbox_thread_by_autopilot_key_ok",
-      "council_round_role_format_preview_ok",
-      "council_round_role_format_preview_v28_ok"
-    )
-    foreach ($k in $offlineFixedKeys) {
-      Set-OfflineSkippedTrue -Name $k
-    }
-    foreach ($k in @($result.Keys)) {
-      if ([string]$k -like "council_autopilot_*") {
-        Set-OfflineSkippedTrue -Name ([string]$k)
-      }
-    }
-  } else {
   $guestKeyCreateBody = @{ label = "ui_smoke_guest" } | ConvertTo-Json -Depth 4
   $guestKeyCreateResp = Invoke-WebRequest -Uri $guestKeysNewUrl -Method Post -TimeoutSec 3 -UseBasicParsing -ContentType "application/json" -Body $guestKeyCreateBody
   if ($guestKeyCreateResp.StatusCode -ne 200) { throw "guest_key_create_failed" }

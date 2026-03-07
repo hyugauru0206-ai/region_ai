@@ -6835,6 +6835,8 @@ export function App(): JSX.Element {
                 <strong>Office Canvas</strong>
                 <div className="composer-actions">
                   <span className="so-muted">workspace={officeWorkspaceKey}</span>
+                  <button type="button" className={quickAccessMode === "favorites" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "favorites"} onClick={() => setQuickAccessMode("favorites")}>Favorites</button>
+                  <button type="button" className={quickAccessMode === "recent" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "recent"} onClick={() => setQuickAccessMode("recent")}>Recent</button>
                   <span className="so-muted">drag to reorder seats</span>
                   <button type="button" onClick={() => resetOfficeLayout()}>Reset layout</button>
                 </div>

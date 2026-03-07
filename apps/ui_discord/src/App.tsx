@@ -1013,6 +1013,12 @@ function isValidInboxThreadKey(value: unknown): boolean {
   return /^[a-z0-9:_-]{1,80}$/.test(s);
 }
 
+function isEditableElement(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = String(target.tagName || "").toUpperCase();
+  return tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT" || !!target.isContentEditable || !!target.closest('[contenteditable="true"]');
+}
+
 function readStoredStringArray(key: string): string[] {
   try {
     const raw = localStorage.getItem(key);
@@ -4670,6 +4676,22 @@ export function App(): JSX.Element {
   }, [officeWorkspaceKey, quickAccessMode]);
 
   useEffect(() => {
+    const handleQuickAccessFavoriteKeydown = (ev: KeyboardEvent): void => {
+      if (activeChannel !== "office" || quickAccessMode !== "favorites") return;
+      if (!ev.altKey || ev.ctrlKey || ev.metaKey || ev.shiftKey) return;
+      if (isEditableElement(ev.target)) return;
+      const index = Number(ev.key) - 1;
+      if (!Number.isInteger(index) || index < 0 || index >= 3) return;
+      const item = visibleQuickAccessFavorites[index];
+      if (!item) return;
+      ev.preventDefault();
+      item.run();
+    };
+    window.addEventListener("keydown", handleQuickAccessFavoriteKeydown);
+    return () => window.removeEventListener("keydown", handleQuickAccessFavoriteKeydown);
+  }, [activeChannel, quickAccessMode, visibleQuickAccessFavorites]);
+
+  useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
     const scopedOrder = readStoredStringArray(officeLayoutStorageKey);
     const legacyOrder = readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY);
@@ -5430,9 +5452,9 @@ export function App(): JSX.Element {
     <span
       key={"workspace_favorite_" + item.id}
       className="so-kbd"
-      title={"Slot " + (index + 1) + " | " + item.title + " | " + item.subtitle}
+      title={"Slot " + (index + 1) + " | Alt+" + (index + 1) + " | " + item.title + " | " + item.subtitle}
     >
-      <span className="so-muted">{index + 1}</span>
+      <span className="so-muted" title={"Alt+" + (index + 1)}>{index + 1}</span>
       <button type="button" className="inline-link" onClick={() => item.run()}>
         {formatWorkspaceFavoriteLabel(item)}
       </button>

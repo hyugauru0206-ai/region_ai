@@ -5428,8 +5428,9 @@ export function App(): JSX.Element {
     <span
       key={"workspace_favorite_" + item.id}
       className="so-kbd"
-      title={item.title + " | " + item.subtitle}
+      title={"Slot " + (index + 1) + " | " + item.title + " | " + item.subtitle}
     >
+      <span className="so-muted">{index + 1}</span>
       <button type="button" className="inline-link" onClick={() => item.run()}>
         {formatWorkspaceFavoriteLabel(item)}
       </button>
@@ -5511,7 +5512,7 @@ export function App(): JSX.Element {
     if (!q) return visibleItems;
     return visibleItems.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
   }, [commandPaletteFavoriteItems, commandPaletteItems, commandPaletteQuery, commandPaletteRecentItems]);
-  const renderCommandPaletteItem = (item: CommandPaletteItem, keyPrefix = ""): JSX.Element => {
+  const renderCommandPaletteItem = (item: CommandPaletteItem, keyPrefix = "", slotLabel = ""): JSX.Element => {
     const isFavorite = favoriteTargetIds.has(item.id);
     return (
       <div
@@ -5531,7 +5532,7 @@ export function App(): JSX.Element {
           }
         }}
       >
-        <div>{item.title}</div>
+        <div>{slotLabel ? (slotLabel + " " + item.title) : item.title}</div>
         <small>{item.subtitle}</small>
         <div className="composer-actions" onClick={(ev) => ev.stopPropagation()} onPointerDown={(ev) => ev.stopPropagation()}>
           <button
@@ -8206,7 +8207,7 @@ export function App(): JSX.Element {
             {commandPaletteFavoriteItems.length ? (
               <div className="list">
                 <div className="so-muted">Favorites</div>
-                {commandPaletteFavoriteItems.map((item) => renderCommandPaletteItem(item, "favorite_"))}
+                {commandPaletteFavoriteItems.map((item, index) => renderCommandPaletteItem(item, "favorite_", String(index + 1) + "."))}
               </div>
             ) : null}
             {commandPaletteRecentItems.length ? (

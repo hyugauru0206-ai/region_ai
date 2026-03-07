@@ -51,6 +51,8 @@ type CommandPaletteRecentItem = {
   subtitle: string;
 };
 
+type QuickAccessMode = "favorites" | "recent";
+
 type ApiResp<T> = { ok: boolean; data: T };
 type DesktopSettings = {
   api_base_url: string;
@@ -947,6 +949,9 @@ const OFFICE_LAYOUT_STORAGE_KEY = "region_ai.office_layout.v1";
 const RECENT_TARGETS_STORAGE_KEY = "region_ai.command_palette_recent.v1";
 const FAVORITE_TARGETS_STORAGE_KEY = "region_ai.favorites.v1";
 const QUICK_ACCESS_MODE_STORAGE_KEY = "region_ai.quick_access_mode.v1";
+const RECENT_TARGET_LIMIT = 8;
+const FAVORITE_TARGET_LIMIT = 6;
+const QUICK_ACCESS_VISIBLE_LIMIT = 3;
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1055,9 +1060,9 @@ function readStoredTargetEntries(key: string, maxItems = 8): CommandPaletteRecen
 }
 
 function readStoredCommandPaletteRecent(storageKey: string, fallbackToLegacy = false): CommandPaletteRecentItem[] {
-  const scoped = readStoredTargetEntries(storageKey, 8);
+  const scoped = readStoredTargetEntries(storageKey, RECENT_TARGET_LIMIT);
   if (scoped.length > 0 || !fallbackToLegacy) return scoped;
-  return readStoredTargetEntries(RECENT_TARGETS_STORAGE_KEY, 8);
+  return readStoredTargetEntries(RECENT_TARGETS_STORAGE_KEY, RECENT_TARGET_LIMIT);
 }
 
 function sanitizeOfficeWorkspaceKey(value: unknown): string {
@@ -1103,6 +1108,62 @@ function getFavoriteTargetsStorageKey(workspaceKey: string): string {
 
 function getQuickAccessModeStorageKey(workspaceKey: string): string {
   return `${QUICK_ACCESS_MODE_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
+function readStoredQuickAccessMode(workspaceKey: string): QuickAccessMode {
+  const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(workspaceKey)) || "").trim().toLowerCase();
+  return raw === "recent" ? "recent" : "favorites";
+}
+
+function replaceStateIfChanged<T>(prev: T, next: T): T {
+  return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
+}
+
+function upsertStoredTargetEntry(entries: CommandPaletteRecentItem[], item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">, maxItems: number): CommandPaletteRecentItem[] {
+  return [
+    { id: item.id, title: item.title, subtitle: item.subtitle },
+    ...entries.filter((row) => row.id !== item.id),
+  ].slice(0, maxItems);
+}
+
+function toggleStoredTargetEntry(entries: CommandPaletteRecentItem[], item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">, maxItems: number): CommandPaletteRecentItem[] {
+  const exists = entries.some((row) => row.id === item.id);
+  if (exists) return entries.filter((row) => row.id !== item.id);
+  return upsertStoredTargetEntry(entries, item, maxItems);
+}
+
+function moveStoredTargetEntry(entries: CommandPaletteRecentItem[], itemId: string, direction: -1 | 1): CommandPaletteRecentItem[] {
+  const index = entries.findIndex((row) => row.id === itemId);
+  if (index < 0) return entries;
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= entries.length) return entries;
+  const next = [...entries];
+  const [moved] = next.splice(index, 1);
+  next.splice(nextIndex, 0, moved);
+  return next;
+}
+
+function resolveStoredCommandPaletteItems(
+  storedItems: CommandPaletteRecentItem[],
+  itemMap: Map<string, CommandPaletteItem>,
+  resolver: (item: CommandPaletteRecentItem, itemMap: Map<string, CommandPaletteItem>) => CommandPaletteItem | null,
+  maxItems: number,
+): CommandPaletteItem[] {
+  return storedItems
+    .map((item) => resolver(item, itemMap))
+    .filter((item): item is CommandPaletteItem => !!item)
+    .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
+    .slice(0, maxItems);
+}
+
+function filterCommandPaletteItemsByQuery(items: CommandPaletteItem[], query: string): CommandPaletteItem[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return items;
+  return items.filter((item) => (item.title + " " + item.subtitle).toLowerCase().includes(normalizedQuery));
+}
+
+function getVisibleQuickAccessItems<T>(items: T[], expanded: boolean): T[] {
+  return expanded ? items : items.slice(0, QUICK_ACCESS_VISIBLE_LIMIT);
 }
 
 
@@ -1441,11 +1502,8 @@ export function App(): JSX.Element {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent(getRecentTargetsStorageKey(resolveOfficeWorkspaceKey()), true));
-  const [commandPaletteFavorites, setCommandPaletteFavorites] = useState<CommandPaletteRecentItem[]>(() => readStoredTargetEntries(getFavoriteTargetsStorageKey(resolveOfficeWorkspaceKey()), 6));
-  const [quickAccessMode, setQuickAccessMode] = useState<"favorites" | "recent">(() => {
-    const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(resolveOfficeWorkspaceKey())) || "").trim().toLowerCase();
-    return raw === "recent" ? "recent" : "favorites";
-  });
+  const [commandPaletteFavorites, setCommandPaletteFavorites] = useState<CommandPaletteRecentItem[]>(() => readStoredTargetEntries(getFavoriteTargetsStorageKey(resolveOfficeWorkspaceKey()), FAVORITE_TARGET_LIMIT));
+  const [quickAccessMode, setQuickAccessMode] = useState<QuickAccessMode>(() => readStoredQuickAccessMode(resolveOfficeWorkspaceKey()));
   const [quickAccessFavoritesExpanded, setQuickAccessFavoritesExpanded] = useState(false);
   const [quickAccessRecentExpanded, setQuickAccessRecentExpanded] = useState(false);
   const [uiTheme, setUiTheme] = useState<UiTheme>(() => (localStorage.getItem(UI_THEME_STORAGE_KEY) === "simple" ? "simple" : "staroffice"));
@@ -4637,37 +4695,28 @@ export function App(): JSX.Element {
 
   useEffect(() => {
     const nextRecent = readStoredCommandPaletteRecent(recentTargetsStorageKey, true);
-    setCommandPaletteRecent((prev) => {
-      const prevJson = JSON.stringify(prev);
-      const nextJson = JSON.stringify(nextRecent);
-      return prevJson === nextJson ? prev : nextRecent;
-    });
+    setCommandPaletteRecent((prev) => replaceStateIfChanged(prev, nextRecent));
   }, [recentTargetsStorageKey]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(recentTargetsStorageKey, JSON.stringify(commandPaletteRecent.slice(0, 8)));
+      localStorage.setItem(recentTargetsStorageKey, JSON.stringify(commandPaletteRecent.slice(0, RECENT_TARGET_LIMIT)));
     } catch {}
   }, [commandPaletteRecent, recentTargetsStorageKey]);
 
   useEffect(() => {
-    const nextFavorites = readStoredTargetEntries(favoriteTargetsStorageKey, 6);
-    setCommandPaletteFavorites((prev) => {
-      const prevJson = JSON.stringify(prev);
-      const nextJson = JSON.stringify(nextFavorites);
-      return prevJson === nextJson ? prev : nextFavorites;
-    });
+    const nextFavorites = readStoredTargetEntries(favoriteTargetsStorageKey, FAVORITE_TARGET_LIMIT);
+    setCommandPaletteFavorites((prev) => replaceStateIfChanged(prev, nextFavorites));
   }, [favoriteTargetsStorageKey]);
 
   useEffect(() => {
     try {
-      localStorage.setItem(favoriteTargetsStorageKey, JSON.stringify(commandPaletteFavorites.slice(0, 6)));
+      localStorage.setItem(favoriteTargetsStorageKey, JSON.stringify(commandPaletteFavorites.slice(0, FAVORITE_TARGET_LIMIT)));
     } catch {}
   }, [commandPaletteFavorites, favoriteTargetsStorageKey]);
 
   useEffect(() => {
-    const raw = String(localStorage.getItem(getQuickAccessModeStorageKey(officeWorkspaceKey)) || "").trim().toLowerCase();
-    setQuickAccessMode(raw === "recent" ? "recent" : "favorites");
+    setQuickAccessMode(readStoredQuickAccessMode(officeWorkspaceKey));
     setQuickAccessFavoritesExpanded(false);
     setQuickAccessRecentExpanded(false);
   }, [officeWorkspaceKey]);
@@ -5182,32 +5231,13 @@ export function App(): JSX.Element {
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
   const selectedCharacterSheetAgent = orgAgents.find((x) => x.id === characterSheetAgentId) || null;
   const recordRecentTarget = (item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">): void => {
-    setCommandPaletteRecent((prev) => [
-      { id: item.id, title: item.title, subtitle: item.subtitle },
-      ...prev.filter((row) => row.id !== item.id),
-    ].slice(0, 8));
+    setCommandPaletteRecent((prev) => upsertStoredTargetEntry(prev, item, RECENT_TARGET_LIMIT));
   };
   const toggleFavoriteTarget = (item: Pick<CommandPaletteRecentItem, "id" | "title" | "subtitle">): void => {
-    setCommandPaletteFavorites((prev) => {
-      const exists = prev.some((row) => row.id === item.id);
-      if (exists) return prev.filter((row) => row.id !== item.id);
-      return [
-        { id: item.id, title: item.title, subtitle: item.subtitle },
-        ...prev.filter((row) => row.id !== item.id),
-      ].slice(0, 6);
-    });
+    setCommandPaletteFavorites((prev) => toggleStoredTargetEntry(prev, item, FAVORITE_TARGET_LIMIT));
   };
   const moveFavoriteTarget = (itemId: string, direction: -1 | 1): void => {
-    setCommandPaletteFavorites((prev) => {
-      const index = prev.findIndex((row) => row.id === itemId);
-      if (index < 0) return prev;
-      const nextIndex = index + direction;
-      if (nextIndex < 0 || nextIndex >= prev.length) return prev;
-      const next = [...prev];
-      const [moved] = next.splice(index, 1);
-      next.splice(nextIndex, 0, moved);
-      return next;
-    });
+    setCommandPaletteFavorites((prev) => moveStoredTargetEntry(prev, itemId, direction));
   };
   const buildFavoriteViewTarget = (id: string, title: string, subtitle: string): CommandPaletteRecentItem | null => {
     const targetId = String(id || "").trim();
@@ -5416,17 +5446,11 @@ export function App(): JSX.Element {
   };
   const workspaceFavoriteItems = useMemo(() => {
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
-    return commandPaletteFavorites
-      .map((item) => resolveStoredFavoriteItem(item, itemMap))
-      .filter((item): item is CommandPaletteItem => !!item)
-      .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
-      .slice(0, 6);
+    return resolveStoredCommandPaletteItems(commandPaletteFavorites, itemMap, resolveStoredFavoriteItem, FAVORITE_TARGET_LIMIT);
   }, [commandPaletteFavorites, commandPaletteItems, orgAgents]);
   const commandPaletteFavoriteItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
-    return workspaceFavoriteItems
-      .filter((item) => !q || ((item.title + " " + item.subtitle).toLowerCase().includes(q)))
-      .slice(0, 6);
+    return filterCommandPaletteItemsByQuery(workspaceFavoriteItems, q).slice(0, FAVORITE_TARGET_LIMIT);
   }, [commandPaletteQuery, workspaceFavoriteItems]);
   const isFavoriteTarget = (itemId: string): boolean => favoriteTargetIds.has(itemId);
   const renderFavoriteToggleButton = (item: CommandPaletteRecentItem | null, label: string): JSX.Element | null => {
@@ -5504,16 +5528,12 @@ export function App(): JSX.Element {
   );
   const workspaceRecentItems = useMemo(() => {
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
-    return commandPaletteRecent
-      .map((item) => itemMap.get(item.id))
-      .filter((item): item is CommandPaletteItem => !!item)
-      .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
-      .slice(0, 8);
+    return resolveStoredCommandPaletteItems(commandPaletteRecent, itemMap, (item, lookup) => lookup.get(item.id) || null, RECENT_TARGET_LIMIT);
   }, [commandPaletteItems, commandPaletteRecent]);
   const visibleQuickAccessItems = quickAccessMode === "recent" ? workspaceRecentItems : workspaceFavoriteItems;
-  const visibleQuickAccessFavorites = quickAccessFavoritesExpanded ? workspaceFavoriteItems : workspaceFavoriteItems.slice(0, 3);
+  const visibleQuickAccessFavorites = getVisibleQuickAccessItems(workspaceFavoriteItems, quickAccessFavoritesExpanded);
   const hiddenQuickAccessFavoritesCount = Math.max(0, workspaceFavoriteItems.length - visibleQuickAccessFavorites.length);
-  const visibleQuickAccessRecent = quickAccessRecentExpanded ? workspaceRecentItems : workspaceRecentItems.slice(0, 3);
+  const visibleQuickAccessRecent = getVisibleQuickAccessItems(workspaceRecentItems, quickAccessRecentExpanded);
   const hiddenQuickAccessRecentCount = Math.max(0, workspaceRecentItems.length - visibleQuickAccessRecent.length);
   const quickAccessEmptyText = quickAccessMode === "recent" ? "No recent targets in this workspace" : "No favorites pinned in this workspace";
   const renderQuickAccessOverflowButton = (expanded: boolean, hiddenCount: number, onToggle: () => void): JSX.Element => (
@@ -5538,13 +5558,11 @@ export function App(): JSX.Element {
   const commandPaletteRecentItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
-    return commandPaletteRecent
-      .map((item) => itemMap.get(item.id))
-      .filter((item): item is CommandPaletteItem => !!item)
-      .filter((item, idx, items) => items.findIndex((row) => row.id === item.id) === idx)
-      .filter((item) => !favoriteTargetIds.has(item.id))
-      .filter((item) => !q || `${item.title} ${item.subtitle}`.toLowerCase().includes(q))
-      .slice(0, 8);
+    return filterCommandPaletteItemsByQuery(
+      resolveStoredCommandPaletteItems(commandPaletteRecent, itemMap, (item, lookup) => lookup.get(item.id) || null, RECENT_TARGET_LIMIT)
+        .filter((item) => !favoriteTargetIds.has(item.id)),
+      q,
+    ).slice(0, RECENT_TARGET_LIMIT);
   }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecent, favoriteTargetIds]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();

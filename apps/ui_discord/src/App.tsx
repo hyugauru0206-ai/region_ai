@@ -5513,12 +5513,21 @@ export function App(): JSX.Element {
   const hiddenQuickAccessFavoritesCount = Math.max(0, workspaceFavoriteItems.length - visibleQuickAccessFavorites.length);
   const visibleQuickAccessRecent = quickAccessRecentExpanded ? workspaceRecentItems : workspaceRecentItems.slice(0, 3);
   const hiddenQuickAccessRecentCount = Math.max(0, workspaceRecentItems.length - visibleQuickAccessRecent.length);
-  const renderWorkspaceRecentChip = (item: CommandPaletteItem): JSX.Element => (
+  const quickAccessEmptyText = quickAccessMode === "recent" ? "No recent targets in this workspace" : "No favorites pinned in this workspace";
+  const renderQuickAccessOverflowButton = (expanded: boolean, hiddenCount: number, onToggle: () => void): JSX.Element => (
+    <div className="composer-actions">
+      <button type="button" className="inline-link" onClick={onToggle}>
+        {expanded ? "Collapse" : ("+" + hiddenCount + " more")}
+      </button>
+    </div>
+  );
+  const renderWorkspaceRecentChip = (item: CommandPaletteItem, index: number): JSX.Element => (
     <span
       key={"workspace_recent_" + item.id}
       className="so-kbd"
-      title={item.title + " | " + item.subtitle}
+      title={"Recent " + (index + 1) + " | " + item.title + " | " + item.subtitle}
     >
+      <span className="so-muted">{index + 1}</span>
       <button type="button" className="inline-link" onClick={() => item.run()}>
         {formatWorkspaceFavoriteLabel(item)}
       </button>
@@ -6709,26 +6718,18 @@ export function App(): JSX.Element {
                   <>
                     <div className="composer-actions">
                       {quickAccessMode === "recent"
-                        ? visibleQuickAccessRecent.map((item) => renderWorkspaceRecentChip(item))
+                        ? visibleQuickAccessRecent.map((item, index) => renderWorkspaceRecentChip(item, index))
                         : visibleQuickAccessFavorites.map((item, index) => renderWorkspaceFavoriteChip(item, index, workspaceFavoriteItems.length))}
                     </div>
-                    {quickAccessMode === "favorites" && workspaceFavoriteItems.length > 3 ? (
-                      <div className="composer-actions">
-                        <button type="button" className="inline-link" onClick={() => setQuickAccessFavoritesExpanded((prev) => !prev)}>
-                          {quickAccessFavoritesExpanded ? "Collapse" : ("+" + hiddenQuickAccessFavoritesCount + " more")}
-                        </button>
-                      </div>
-                    ) : null}
-                    {quickAccessMode === "recent" && workspaceRecentItems.length > 3 ? (
-                      <div className="composer-actions">
-                        <button type="button" className="inline-link" onClick={() => setQuickAccessRecentExpanded((prev) => !prev)}>
-                          {quickAccessRecentExpanded ? "Collapse" : ("+" + hiddenQuickAccessRecentCount + " more")}
-                        </button>
-                      </div>
-                    ) : null}
+                    {quickAccessMode === "favorites" && workspaceFavoriteItems.length > 3
+                      ? renderQuickAccessOverflowButton(quickAccessFavoritesExpanded, hiddenQuickAccessFavoritesCount, () => setQuickAccessFavoritesExpanded((prev) => !prev))
+                      : null}
+                    {quickAccessMode === "recent" && workspaceRecentItems.length > 3
+                      ? renderQuickAccessOverflowButton(quickAccessRecentExpanded, hiddenQuickAccessRecentCount, () => setQuickAccessRecentExpanded((prev) => !prev))
+                      : null}
                   </>
                 ) : (
-                  <div className="so-muted">{quickAccessMode === "recent" ? "No recent targets in this workspace" : "No favorites pinned in this workspace"}</div>
+                  <div className="so-muted">{quickAccessEmptyText}</div>
                 )}
               </div>
               <div className="office-grid">

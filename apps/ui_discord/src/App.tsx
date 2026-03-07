@@ -961,6 +961,7 @@ const RECENT_TARGET_LIMIT = 8;
 const FAVORITE_TARGET_LIMIT = 6;
 const QUICK_ACCESS_VISIBLE_LIMIT = 3;
 const RIGHT_PANE_TAB_LIMIT = 5;
+const CLOSED_RIGHT_PANE_TAB_LIMIT = 8;
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1573,6 +1574,7 @@ export function App(): JSX.Element {
   const [characterSheetLastAgentId, setCharacterSheetLastAgentId] = useState(() => localStorage.getItem(CHARACTER_SHEET_LAST_AGENT_STORAGE_KEY) || "");
   const [rightPaneTabs, setRightPaneTabs] = useState<RightPaneTab[]>([]);
   const [activeRightPaneTabId, setActiveRightPaneTabId] = useState("");
+  const [closedRightPaneTabs, setClosedRightPaneTabs] = useState<RightPaneTab[]>([]);
   const [characterSheetIncludeDerivedMemory, setCharacterSheetIncludeDerivedMemory] = useState(false);
   const [characterSheetMemoryEpisodes, setCharacterSheetMemoryEpisodes] = useState<MemoryEntry[]>([]);
   const [characterSheetMemoryKnowledge, setCharacterSheetMemoryKnowledge] = useState<MemoryEntry[]>([]);
@@ -3026,14 +3028,7 @@ export function App(): JSX.Element {
       return;
     }
     recordRecentTargetEntry(buildThreadTargetEntry(key));
-    registerRightPaneTab(buildRightPaneThreadTab(key));
-    setInboxThreadViewItems([]);
-    setInboxThreadViewKey(key);
-    setInboxThreadViewStatus("loading...");
-    setInboxThreadKeyFilter(key);
-    setInboxFilter("");
-    setActiveChannel("inbox");
-    void loadInboxThreadView(key, 20);
+    activateRightPaneTab(buildRightPaneThreadTab(key));
   }
 
   async function copyTrackerValue(value: string): Promise<void> {
@@ -4780,6 +4775,37 @@ export function App(): JSX.Element {
   }, [activeChannel, quickAccessMode, visibleQuickAccessFavorites]);
 
   useEffect(() => {
+    const handleRightPaneTabKeydown = (ev: KeyboardEvent): void => {
+      if (!ev.altKey || !ev.shiftKey || ev.ctrlKey || ev.metaKey) return;
+      if (isEditableElement(ev.target)) return;
+      if (commandPaletteOpen) return;
+      if (!validRightPaneTabs.length && ev.key.toLowerCase() !== "t") return;
+      if (ev.key === "ArrowRight") {
+        ev.preventDefault();
+        cycleRightPaneTab(1);
+        return;
+      }
+      if (ev.key === "ArrowLeft") {
+        ev.preventDefault();
+        cycleRightPaneTab(-1);
+        return;
+      }
+      if (ev.key.toLowerCase() === "w") {
+        if (!activeRightPaneTab) return;
+        ev.preventDefault();
+        closeRightPaneTab(activeRightPaneTab.id);
+        return;
+      }
+      if (ev.key.toLowerCase() === "t") {
+        ev.preventDefault();
+        reopenClosedRightPaneTab();
+      }
+    };
+    window.addEventListener("keydown", handleRightPaneTabKeydown);
+    return () => window.removeEventListener("keydown", handleRightPaneTabKeydown);
+  }, [activeRightPaneTab, commandPaletteOpen, validRightPaneTabs]);
+
+  useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
     const scopedOrder = readStoredStringArray(officeLayoutStorageKey);
     const legacyOrder = readStoredStringArray(OFFICE_LAYOUT_STORAGE_KEY);
@@ -4970,9 +4996,7 @@ export function App(): JSX.Element {
     if (!id) return;
     const agent = orgAgents.find((item) => String(item.id || "").trim() === id) || null;
     recordRecentTargetEntry(buildAgentTargetEntry(id, agent?.display_name, agent?.role, agent?.status, "Open right-pane Character Sheet"));
-    registerRightPaneTab(buildRightPaneCharacterTab(id));
-    setCharacterSheetAgentId(id);
-    setCharacterSheetLastAgentId(id);
+    activateRightPaneTab(buildRightPaneCharacterTab(id));
     try {
       localStorage.setItem(CHARACTER_SHEET_LAST_AGENT_STORAGE_KEY, id);
     } catch {
@@ -5386,17 +5410,34 @@ export function App(): JSX.Element {
     });
     setActiveRightPaneTabId(tab.id);
   };
+  const activateRightPaneTab = (tab: RightPaneTab | null): void => {
+    if (!tab) return;
+    registerRightPaneTab(tab);
+    syncRightPaneTab(tab);
+  };
   const switchRightPaneTab = (tabId: string): void => {
     const nextTab = validRightPaneTabs.find((item) => item.id === tabId) || null;
     if (!nextTab) return;
     setActiveRightPaneTabId(nextTab.id);
     syncRightPaneTab(nextTab);
   };
+  const cycleRightPaneTab = (direction: -1 | 1): void => {
+    if (validRightPaneTabs.length < 2) return;
+    const currentIndex = validRightPaneTabs.findIndex((item) => item.id === activeRightPaneTabId);
+    const startIndex = currentIndex >= 0 ? currentIndex : 0;
+    const nextIndex = (startIndex + direction + validRightPaneTabs.length) % validRightPaneTabs.length;
+    const nextTab = validRightPaneTabs[nextIndex] || null;
+    if (!nextTab) return;
+    switchRightPaneTab(nextTab.id);
+  };
   const closeRightPaneTab = (tabId: string): void => {
     const currentIndex = validRightPaneTabs.findIndex((item) => item.id === tabId);
     if (currentIndex < 0) return;
     const closingTab = validRightPaneTabs[currentIndex] || null;
     const nextTabs = validRightPaneTabs.filter((item) => item.id !== tabId);
+    if (closingTab) {
+      setClosedRightPaneTabs((prev) => [closingTab, ...prev.filter((item) => item.id !== closingTab.id)].slice(0, CLOSED_RIGHT_PANE_TAB_LIMIT));
+    }
     setRightPaneTabs(nextTabs);
     if (closingTab?.kind === "character_sheet" && String(characterSheetAgentId || "").trim() === closingTab.targetId) {
       setCharacterSheetAgentId("");
@@ -5414,6 +5455,22 @@ export function App(): JSX.Element {
       return;
     }
     closeRightPaneThreadDetail();
+  };
+  const reopenClosedRightPaneTab = (): void => {
+    if (!closedRightPaneTabs.length) return;
+    const reopenTab = closedRightPaneTabs
+      .map((tab) => {
+        if (tab.kind === "character_sheet") return buildRightPaneCharacterTab(tab.targetId);
+        if (tab.kind === "thread") return buildRightPaneThreadTab(tab.targetId);
+        return null;
+      })
+      .find((tab): tab is RightPaneTab => !!tab) || null;
+    if (!reopenTab) {
+      setClosedRightPaneTabs([]);
+      return;
+    }
+    setClosedRightPaneTabs((prev) => prev.filter((item) => item.id !== reopenTab.id));
+    activateRightPaneTab(reopenTab);
   };
   const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
     if (tab.kind === "character_sheet") {

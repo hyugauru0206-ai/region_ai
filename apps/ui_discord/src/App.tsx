@@ -52,6 +52,14 @@ type CommandPaletteRecentItem = {
 };
 
 type QuickAccessMode = "favorites" | "recent";
+type RightPaneTabKind = "character_sheet" | "thread";
+type RightPaneTab = {
+  id: string;
+  kind: RightPaneTabKind;
+  targetId: string;
+  label: string;
+  title: string;
+};
 
 type ApiResp<T> = { ok: boolean; data: T };
 type DesktopSettings = {
@@ -952,6 +960,7 @@ const QUICK_ACCESS_MODE_STORAGE_KEY = "region_ai.quick_access_mode.v1";
 const RECENT_TARGET_LIMIT = 8;
 const FAVORITE_TARGET_LIMIT = 6;
 const QUICK_ACCESS_VISIBLE_LIMIT = 3;
+const RIGHT_PANE_TAB_LIMIT = 5;
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -1562,6 +1571,8 @@ export function App(): JSX.Element {
   const [selectedAgentId, setSelectedAgentId] = useState("");
   const [characterSheetAgentId, setCharacterSheetAgentId] = useState("");
   const [characterSheetLastAgentId, setCharacterSheetLastAgentId] = useState(() => localStorage.getItem(CHARACTER_SHEET_LAST_AGENT_STORAGE_KEY) || "");
+  const [rightPaneTabs, setRightPaneTabs] = useState<RightPaneTab[]>([]);
+  const [activeRightPaneTabId, setActiveRightPaneTabId] = useState("");
   const [characterSheetIncludeDerivedMemory, setCharacterSheetIncludeDerivedMemory] = useState(false);
   const [characterSheetMemoryEpisodes, setCharacterSheetMemoryEpisodes] = useState<MemoryEntry[]>([]);
   const [characterSheetMemoryKnowledge, setCharacterSheetMemoryKnowledge] = useState<MemoryEntry[]>([]);
@@ -3015,6 +3026,10 @@ export function App(): JSX.Element {
       return;
     }
     recordRecentTargetEntry(buildThreadTargetEntry(key));
+    registerRightPaneTab(buildRightPaneThreadTab(key));
+    setInboxThreadViewItems([]);
+    setInboxThreadViewKey(key);
+    setInboxThreadViewStatus("loading...");
     setInboxThreadKeyFilter(key);
     setInboxFilter("");
     setActiveChannel("inbox");
@@ -4404,6 +4419,30 @@ export function App(): JSX.Element {
   }, [characterSheetAgentId]);
 
   useEffect(() => {
+    if (validRightPaneTabs.length === rightPaneTabs.length) {
+      if (activeRightPaneTabId && !validRightPaneTabs.some((tab) => tab.id === activeRightPaneTabId)) {
+        const fallbackTab = validRightPaneTabs[validRightPaneTabs.length - 1] || null;
+        setActiveRightPaneTabId(fallbackTab?.id || "");
+        if (fallbackTab) {
+          syncRightPaneTab(fallbackTab);
+        } else {
+          closeRightPaneThreadDetail();
+        }
+      }
+      return;
+    }
+    setRightPaneTabs(validRightPaneTabs);
+    if (!activeRightPaneTabId || validRightPaneTabs.some((tab) => tab.id === activeRightPaneTabId)) return;
+    const fallbackTab = validRightPaneTabs[validRightPaneTabs.length - 1] || null;
+    setActiveRightPaneTabId(fallbackTab?.id || "");
+    if (fallbackTab) {
+      syncRightPaneTab(fallbackTab);
+      return;
+    }
+    closeRightPaneThreadDetail();
+  }, [activeRightPaneTabId, rightPaneTabs, validRightPaneTabs]);
+
+  useEffect(() => {
     if (!(activeChannel === "activity" || activeChannel === "workspace")) return;
     const mode = activeChannel;
     const clearFallback = () => {
@@ -4931,6 +4970,7 @@ export function App(): JSX.Element {
     if (!id) return;
     const agent = orgAgents.find((item) => String(item.id || "").trim() === id) || null;
     recordRecentTargetEntry(buildAgentTargetEntry(id, agent?.display_name, agent?.role, agent?.status, "Open right-pane Character Sheet"));
+    registerRightPaneTab(buildRightPaneCharacterTab(id));
     setCharacterSheetAgentId(id);
     setCharacterSheetLastAgentId(id);
     try {
@@ -4941,6 +4981,11 @@ export function App(): JSX.Element {
   }
 
   function closeCharacterSheet(): void {
+    const activeId = String(characterSheetAgentId || "").trim();
+    if (activeId) {
+      closeRightPaneTab(`right_pane_agent_${activeId}`);
+      return;
+    }
     setCharacterSheetAgentId("");
     setCharacterSheetLiveActivity([]);
     setCharacterSheetActivityStatus("idle");
@@ -4996,8 +5041,7 @@ export function App(): JSX.Element {
   function openCharacterSheetInboxThread(agent: OrgAgent | null): void {
     const key = String(agent?.thread_key || "").trim().toLowerCase();
     if (!key) return;
-    setActiveChannel("inbox");
-    void loadInboxThreadView(key, 20);
+    openTrackerThread(key);
   }
 
   async function refreshCharacterSheetMemory(agentIdInput?: string): Promise<void> {
@@ -5273,6 +5317,103 @@ export function App(): JSX.Element {
       subtitle: "Open current operational run",
     };
   };
+  const closeRightPaneThreadDetail = (): void => {
+    setInboxThreadViewItems([]);
+    setInboxThreadViewKey("");
+    setInboxThreadViewStatus("");
+  };
+  const buildRightPaneCharacterTab = (agentId: string): RightPaneTab | null => {
+    const id = String(agentId || "").trim();
+    if (!id) return null;
+    const agent = orgAgents.find((item) => String(item.id || "").trim() === id) || null;
+    if (!agent) return null;
+    return {
+      id: `right_pane_agent_${id}`,
+      kind: "character_sheet",
+      targetId: id,
+      label: agent.display_name || id,
+      title: `Character Sheet: ${agent.display_name || id}`,
+    };
+  };
+  const buildRightPaneThreadTab = (threadKey: string): RightPaneTab | null => {
+    const key = String(threadKey || "").trim().toLowerCase();
+    if (!isValidInboxThreadKey(key)) return null;
+    return {
+      id: `right_pane_thread_${key}`,
+      kind: "thread",
+      targetId: key,
+      label: formatCompactTargetId("thr", key),
+      title: `Thread: ${key}`,
+    };
+  };
+  const syncRightPaneTab = (tab: RightPaneTab): void => {
+    if (tab.kind === "character_sheet") {
+      setCharacterSheetAgentId(tab.targetId);
+      setCharacterSheetLastAgentId(tab.targetId);
+      return;
+    }
+    setInboxThreadViewItems([]);
+    setInboxThreadViewKey(tab.targetId);
+    setInboxThreadViewStatus("loading...");
+    setInboxThreadKeyFilter(tab.targetId);
+    setInboxFilter("");
+    setActiveChannel("inbox");
+    void loadInboxThreadView(tab.targetId, 20);
+  };
+  const registerRightPaneTab = (tab: RightPaneTab | null): void => {
+    if (!tab) return;
+    setRightPaneTabs((prev) => {
+      const next = prev.filter((item) => item.id !== tab.id);
+      next.push(tab);
+      while (next.length > RIGHT_PANE_TAB_LIMIT) {
+        const dropIndex = next.findIndex((item) => item.id !== tab.id);
+        if (dropIndex < 0) {
+          next.shift();
+        } else {
+          next.splice(dropIndex, 1);
+        }
+      }
+      return next;
+    });
+    setActiveRightPaneTabId(tab.id);
+  };
+  const switchRightPaneTab = (tabId: string): void => {
+    const nextTab = validRightPaneTabs.find((item) => item.id === tabId) || null;
+    if (!nextTab) return;
+    setActiveRightPaneTabId(nextTab.id);
+    syncRightPaneTab(nextTab);
+  };
+  const closeRightPaneTab = (tabId: string): void => {
+    const currentIndex = validRightPaneTabs.findIndex((item) => item.id === tabId);
+    if (currentIndex < 0) return;
+    const closingTab = validRightPaneTabs[currentIndex] || null;
+    const nextTabs = validRightPaneTabs.filter((item) => item.id !== tabId);
+    setRightPaneTabs(nextTabs);
+    if (closingTab?.kind === "character_sheet" && String(characterSheetAgentId || "").trim() === closingTab.targetId) {
+      setCharacterSheetAgentId("");
+      setCharacterSheetLiveActivity([]);
+      setCharacterSheetActivityStatus("idle");
+    }
+    if (closingTab?.kind === "thread" && String(inboxThreadViewKey || "").trim().toLowerCase() === closingTab.targetId) {
+      closeRightPaneThreadDetail();
+    }
+    if (activeRightPaneTabId !== tabId) return;
+    const fallbackTab = nextTabs[Math.min(currentIndex, nextTabs.length - 1)] || nextTabs[nextTabs.length - 1] || null;
+    setActiveRightPaneTabId(fallbackTab?.id || "");
+    if (fallbackTab) {
+      syncRightPaneTab(fallbackTab);
+      return;
+    }
+    closeRightPaneThreadDetail();
+  };
+  const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
+    if (tab.kind === "character_sheet") {
+      return orgAgents.some((agent) => String(agent.id || "").trim() === tab.targetId);
+    }
+    return isValidInboxThreadKey(tab.targetId);
+  }), [orgAgents, rightPaneTabs]);
+  const activeRightPaneTab = validRightPaneTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
+  const activeRightPaneThreadKey = activeRightPaneTab?.kind === "thread" ? activeRightPaneTab.targetId : "";
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -7985,23 +8126,53 @@ export function App(): JSX.Element {
 
       <aside className="pane pane-right">
         <div className="section-title">Context</div>
+        {validRightPaneTabs.length ? (
+          <section className="so-panel">
+            <div className="row-head">
+              <strong>Session Tabs</strong>
+              <small>{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
+            </div>
+            <div className="composer-actions">
+              {validRightPaneTabs.map((tab) => {
+                const isActive = activeRightPaneTab?.id === tab.id;
+                return (
+                  <span key={tab.id} title={tab.title}>
+                    <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}</button>
+                    <button type="button" title="Close tab" onClick={(e) => { e.stopPropagation(); closeRightPaneTab(tab.id); }}>x</button>
+                  </span>
+                );
+              })}
+            </div>
+          </section>
+        ) : null}
         <section className="character-sheet-panel raPanel so-panel">
           <div className="so-header">
             <div>
-              <strong>Character Sheet</strong>
-              <div className="so-muted">Right pane / StarOffice panel</div>
+              <strong>{activeRightPaneTab?.kind === "thread" ? "Thread" : "Character Sheet"}</strong>
+              <div className="so-muted">Right pane / session detail</div>
             </div>
             <div className="composer-actions">
-              {characterSheetLastAgentId && !characterSheetAgentId ? (
-                <button type="button" title="Reopen last sheet" onClick={() => openCharacterSheet(characterSheetLastAgentId)}>↺</button>
+              {characterSheetLastAgentId && (!characterSheetAgentId || activeRightPaneTab?.kind !== "character_sheet") ? (
+                <button type="button" title="Reopen last sheet" onClick={() => openCharacterSheet(characterSheetLastAgentId)}>Reopen</button>
               ) : null}
-              {characterSheetAgentId ? (
-                <button type="button" title="Edit in members" onClick={() => { setActiveChannel("members"); setSelectedAgentId(characterSheetAgentId); }}>✎</button>
+              {activeRightPaneTab?.kind === "character_sheet" ? (
+                <>
+                  {characterSheetAgentId ? (
+                    <button type="button" title="Edit in members" onClick={() => { setActiveChannel("members"); setSelectedAgentId(characterSheetAgentId); }}>Edit</button>
+                  ) : null}
+                  {characterSheetAgentId ? <button type="button" title="Close sheet" onClick={() => closeCharacterSheet()}>Close</button> : null}
+                </>
               ) : null}
-              {characterSheetAgentId ? <button type="button" title="Close sheet" onClick={() => closeCharacterSheet()}>✕</button> : null}
+              {activeRightPaneTab?.kind === "thread" && activeRightPaneThreadKey ? (
+                <>
+                  <button type="button" title="Open inbox" onClick={() => setActiveChannel("inbox")}>Inbox</button>
+                  <button type="button" title="Refresh thread" onClick={() => { setActiveChannel("inbox"); void loadInboxThreadView(activeRightPaneThreadKey, 20); }}>Refresh</button>
+                  <button type="button" title="Close thread" onClick={() => closeRightPaneTab(activeRightPaneTab.id)}>Close</button>
+                </>
+              ) : null}
             </div>
           </div>
-          {selectedCharacterSheetAgent ? (
+          {activeRightPaneTab?.kind === "character_sheet" && selectedCharacterSheetAgent ? (
             <div className="character-sheet-body">
               <div className="character-sheet-card so-card">
                 <div className="character-sheet-header">
@@ -8089,8 +8260,49 @@ export function App(): JSX.Element {
                 </div>
               </div>
             </div>
+          ) : activeRightPaneTab?.kind === "thread" && activeRightPaneThreadKey ? (
+            <div className="character-sheet-body">
+              <div className="character-sheet-card so-card">
+                <div className="row-head">
+                  <strong>{activeRightPaneTab.label}</strong>
+                  <small>{inboxThreadViewStatus || "idle"}</small>
+                </div>
+                <div className="raKvRow">
+                  <span className="raKvKey">thread_key</span>
+                  <code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneThreadKey}</code>
+                </div>
+                <div className="composer-actions">
+                  <button type="button" onClick={() => { setActiveChannel("inbox"); void loadInboxThreadView(activeRightPaneThreadKey, 20); }}>Reload</button>
+                  <button type="button" onClick={() => setActiveChannel("inbox")}>Open inbox</button>
+                </div>
+              </div>
+              <div className="character-sheet-card so-card">
+                <div className="row-head">
+                  <strong>Latest items</strong>
+                  <small>{inboxThreadViewItems.length} items</small>
+                </div>
+                <div className="list">
+                  {inboxThreadViewItems.slice(0, 6).map((item) => (
+                    <button
+                      key={`right_pane_thread_item_${item.id}`}
+                      className="list-item"
+                      type="button"
+                      onClick={() => {
+                        const hit = inboxItems.find((x) => x.id === item.id) || item;
+                        setSelectedInboxItem(hit);
+                        setActiveChannel("inbox");
+                      }}
+                    >
+                      <div>{item.title || "(no title)"}</div>
+                      <small>{formatTs(item.ts)} | {item.source || "-"}</small>
+                    </button>
+                  ))}
+                  {!inboxThreadViewItems.length ? <div className="empty">No thread items loaded</div> : null}
+                </div>
+              </div>
+            </div>
           ) : (
-            <div className="empty">Select ステータス from #ワークスペース or #メンバー</div>
+            <div className="empty">Open a character or thread to keep it handy in the right pane.</div>
           )}
         </section>
         {activeChannel === "inbox" && (

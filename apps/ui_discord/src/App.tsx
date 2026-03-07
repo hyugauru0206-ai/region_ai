@@ -5480,6 +5480,20 @@ export function App(): JSX.Element {
   }), [orgAgents, rightPaneTabs]);
   const activeRightPaneTab = validRightPaneTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
   const activeRightPaneThreadKey = activeRightPaneTab?.kind === "thread" ? activeRightPaneTab.targetId : "";
+  const commandPaletteOpenTabItems = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    const rows = validRightPaneTabs.map((tab) => {
+      const isActive = tab.id === activeRightPaneTabId;
+      return {
+        id: tab.kind === "character_sheet" ? `agent_${tab.targetId}` : `thread_${tab.targetId}`,
+        title: `Open Tab: ${tab.label}${isActive ? " (active)" : ""}`,
+        subtitle: tab.kind === "character_sheet" ? "Focus open character sheet" : "Focus open thread detail",
+        run: () => switchRightPaneTab(tab.id),
+      } as CommandPaletteItem;
+    });
+    if (!q) return rows;
+    return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
+  }, [activeRightPaneTabId, commandPaletteQuery, validRightPaneTabs]);
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -5761,11 +5775,11 @@ export function App(): JSX.Element {
   }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecent, favoriteTargetIds]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
-    const hiddenIds = new Set([...commandPaletteFavoriteItems.map((item) => item.id), ...commandPaletteRecentItems.map((item) => item.id)]);
+    const hiddenIds = new Set([...commandPaletteFavoriteItems.map((item) => item.id), ...commandPaletteRecentItems.map((item) => item.id), ...commandPaletteOpenTabItems.map((item) => item.id)]);
     const visibleItems = commandPaletteItems.filter((item) => !hiddenIds.has(item.id));
     if (!q) return visibleItems;
     return visibleItems.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
-  }, [commandPaletteFavoriteItems, commandPaletteItems, commandPaletteQuery, commandPaletteRecentItems]);
+  }, [commandPaletteFavoriteItems, commandPaletteItems, commandPaletteOpenTabItems, commandPaletteQuery, commandPaletteRecentItems]);
   const renderCommandPaletteItem = (item: CommandPaletteItem, keyPrefix = "", slotLabel = ""): JSX.Element => {
     const isFavorite = favoriteTargetIds.has(item.id);
     return (
@@ -8561,9 +8575,15 @@ export function App(): JSX.Element {
                 {commandPaletteRecentItems.map((item) => renderCommandPaletteItem(item, "recent_"))}
               </div>
             ) : null}
+            {commandPaletteOpenTabItems.length ? (
+              <div className="list">
+                <div className="so-muted">Open Tabs</div>
+                {commandPaletteOpenTabItems.map((item) => renderCommandPaletteItem(item, "open_tab_"))}
+              </div>
+            ) : null}
             <div className="list">
               {commandPaletteFiltered.map((item) => renderCommandPaletteItem(item))}
-              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
+              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteOpenTabItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
             </div>
           </div>
         </div>

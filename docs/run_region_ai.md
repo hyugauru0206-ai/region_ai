@@ -147,8 +147,12 @@
     - live activity subscription policy: active only while sheet is open; on stream failure fallback is `/api/activity` polling every 5s
     - ops shortcuts: `Heartbeat (dry-run)`, `Run now`, and `Open #inbox thread` (only when agent `thread_key` exists)
   - UI Polish v1 (Star Office + Agent HQ inspirations, UI-only):
-    - Discord-like IA is preserved; chat and existing channels remain primary surfaces.
-    - visual unification: shared tokens/cards/badges/mono-wrap rules across dashboard, right pane, and character-sheet.
+    - Discord-like IA is preserved; chat remains primary and the right pane remains the detail surface.
+    - `Office` (Control Room) and `Debate` are stable primary navigation surfaces in the current UI.
+    - Control Room owns the visible quick-access strip for the current workspace.
+    - quick access modes are `Favorites` and `Recent`: both are workspace-scoped, share the same compact shell, and only the selected mode persists per workspace.
+    - favorites are pinned from command palette / office / debate / control room action points; favorites keep manual order + slot numbering and feed both the quick-access strip and palette favorites.
+    - visual unification: shared tokens/cards/badges/mono-wrap rules across dashboard, right pane, character-sheet, office, and debate.
     - one-click routes are preserved and emphasized: workspace seat -> Character Sheet, members list -> Character Sheet, sheet -> thread/inbox/memory.
 - UI hub API (additive):
   - `GET /api/org/agents`
@@ -409,6 +413,9 @@
 - Smoke:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/desktop_smoke.ps1 -Json`
   - set `REGION_AI_SKIP_DESKTOP=1` to skip when GUI/deps are not available
+  - when Electron runtime deps are available, smoke exercises desktop shell checks plus Region UI assertions for quick access, command palette, and Office/Debate navigation
+  - when smoke falls back to `local_static_fallback`, it still syntax-checks Electron entrypoints and verifies stable Region UI markers for quick access, command palette, and Office/Debate/ControlRoom from built output when available (source markers are the last fallback)
+  - runtime-only assertions such as quick-access mode localStorage restore and favorite slot shortcut dispatch remain Electron-path only
 - Bridge usage:
   - `Copy for ChatGPT` / `Copy for CODEX`
     - source priority: selected message payload (`regionai:selected`) -> left-pane text selection -> Clipboard Bus latest -> OS clipboard

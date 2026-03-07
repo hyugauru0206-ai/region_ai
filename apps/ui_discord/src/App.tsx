@@ -5346,6 +5346,15 @@ export function App(): JSX.Element {
       title: `Thread: ${key}`,
     };
   };
+  const buildFavoriteItemFromRightPaneTab = (tab: RightPaneTab): CommandPaletteRecentItem | null => {
+    if (tab.kind === "character_sheet") {
+      return buildAgentTargetEntry(tab.targetId);
+    }
+    if (tab.kind === "thread") {
+      return buildThreadTargetEntry(tab.targetId);
+    }
+    return null;
+  };
   const syncRightPaneTab = (tab: RightPaneTab): void => {
     if (tab.kind === "character_sheet") {
       setCharacterSheetAgentId(tab.targetId);
@@ -8135,9 +8144,23 @@ export function App(): JSX.Element {
             <div className="composer-actions">
               {validRightPaneTabs.map((tab) => {
                 const isActive = activeRightPaneTab?.id === tab.id;
+                const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
+                const isFavorite = favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
                 return (
                   <span key={tab.id} title={tab.title}>
                     <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}</button>
+                    {favoriteItem ? (
+                      <button
+                        type="button"
+                        className="inline-link"
+                        title={isFavorite ? "Unpin tab target" : "Pin tab target"}
+                        aria-pressed={isFavorite}
+                        onClick={(e) => { e.stopPropagation(); toggleFavoriteTarget(favoriteItem); }}
+                        onPointerDown={(e) => e.stopPropagation()}
+                      >
+                        {isFavorite ? "Unpin" : "Pin"}
+                      </button>
+                    ) : null}
                     <button type="button" title="Close tab" onClick={(e) => { e.stopPropagation(); closeRightPaneTab(tab.id); }}>x</button>
                   </span>
                 );

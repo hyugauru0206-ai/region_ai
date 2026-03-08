@@ -5718,6 +5718,26 @@ export function App(): JSX.Element {
     setRightPaneWorksets((prev) => prev.map((item) => item.id === worksetId ? { ...item, targets } : item));
     showToast("workset updated");
   };
+  const renameRightPaneWorkset = (worksetId: string): void => {
+    const workset = rightPaneWorksets.find((item) => item.id === worksetId) || null;
+    if (!workset) return;
+    const rawName = window.prompt("Rename workset", workset.name);
+    const name = String(rawName || "").trim();
+    if (!name || name === workset.name) return;
+    setRightPaneWorksets((prev) => prev.map((item) => item.id === worksetId ? { ...item, name } : item));
+    showToast("workset renamed");
+  };
+  const duplicateRightPaneWorkset = (worksetId: string): void => {
+    const workset = rightPaneWorksets.find((item) => item.id === worksetId) || null;
+    if (!workset) return;
+    const copied = {
+      id: `workset_${Date.now().toString(36)}`,
+      name: `Copy of ${workset.name}`,
+      targets: workset.targets.slice(),
+    };
+    setRightPaneWorksets((prev) => [copied, ...prev].slice(0, RIGHT_PANE_WORKSET_LIMIT));
+    showToast("workset duplicated");
+  };
   const deleteRightPaneWorkset = (worksetId: string): void => {
     setRightPaneWorksets((prev) => prev.filter((item) => item.id !== worksetId));
   };
@@ -8592,9 +8612,11 @@ export function App(): JSX.Element {
                     ) : null}
                     {rightPaneWorksets.map((workset) => (
                       <div key={workset.id} className="right-pane-tab-overflow-row">
-                        <button type="button" className="inline-link" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name}`}</button>
+                        <button type="button" className="inline-link" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name} (${workset.targets.length})`}</button>
                         <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); openRightPaneWorksetAsTabs(workset.id, true); }}>Replace</button>
                         {validRightPaneTabs.length ? <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); updateRightPaneWorksetFromCurrentTabs(workset.id); }}>Update</button> : null}
+                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); renameRightPaneWorkset(workset.id); }}>Rename</button>
+                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); duplicateRightPaneWorkset(workset.id); }}>Duplicate</button>
                         <button type="button" className="inline-link" title="Delete workset" onClick={(e) => { e.stopPropagation(); deleteRightPaneWorkset(workset.id); }}>Delete</button>
                       </div>
                     ))}

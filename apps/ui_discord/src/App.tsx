@@ -5810,12 +5810,35 @@ export function App(): JSX.Element {
   }, [commandPaletteQuery, reopenableClosedRightPaneTabs]);
   const commandPaletteWorksetItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
-    const rows = rightPaneWorksets.map((workset) => ({
-      id: `workset_${workset.id}`,
-      title: `Workset: ${workset.name}`,
-      subtitle: `Open ${workset.targets.length} saved right-pane tab${workset.targets.length === 1 ? "" : "s"}`,
-      run: () => openRightPaneWorksetAsTabs(workset.id),
-    } as CommandPaletteItem));
+    const rows = rightPaneWorksets.flatMap((workset) => {
+      const countLabel = `${workset.targets.length} saved right-pane tab${workset.targets.length === 1 ? "" : "s"}`;
+      return [
+        {
+          id: `workset_open_${workset.id}`,
+          title: `Workset: ${workset.name}`,
+          subtitle: `Open ${countLabel}`,
+          run: () => openRightPaneWorksetAsTabs(workset.id),
+        },
+        {
+          id: `workset_rename_${workset.id}`,
+          title: `Rename Workset: ${workset.name}`,
+          subtitle: countLabel,
+          run: () => renameRightPaneWorkset(workset.id),
+        },
+        {
+          id: `workset_duplicate_${workset.id}`,
+          title: `Duplicate Workset: ${workset.name}`,
+          subtitle: countLabel,
+          run: () => duplicateRightPaneWorkset(workset.id),
+        },
+        {
+          id: `workset_delete_${workset.id}`,
+          title: `Delete Workset: ${workset.name}`,
+          subtitle: countLabel,
+          run: () => deleteRightPaneWorkset(workset.id),
+        },
+      ] as CommandPaletteItem[];
+    });
     if (!q) return rows;
     return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
   }, [commandPaletteQuery, rightPaneWorksets]);

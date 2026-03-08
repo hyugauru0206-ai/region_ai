@@ -5457,21 +5457,19 @@ export function App(): JSX.Element {
     }
     closeRightPaneThreadDetail();
   };
+  const reopenClosedRightPaneTabById = (tabId: string): void => {
+    const reopenTab = reopenableClosedRightPaneTabs.find((tab) => tab.id === tabId) || null;
+    if (!reopenTab) return;
+    setClosedRightPaneTabs((prev) => prev.filter((item) => item.id !== reopenTab.id));
+    activateRightPaneTab(reopenTab);
+  };
   const reopenClosedRightPaneTab = (): void => {
-    if (!closedRightPaneTabs.length) return;
-    const reopenTab = closedRightPaneTabs
-      .map((tab) => {
-        if (tab.kind === "character_sheet") return buildRightPaneCharacterTab(tab.targetId);
-        if (tab.kind === "thread") return buildRightPaneThreadTab(tab.targetId);
-        return null;
-      })
-      .find((tab): tab is RightPaneTab => !!tab) || null;
+    const reopenTab = reopenableClosedRightPaneTabs[0] || null;
     if (!reopenTab) {
       setClosedRightPaneTabs([]);
       return;
     }
-    setClosedRightPaneTabs((prev) => prev.filter((item) => item.id !== reopenTab.id));
-    activateRightPaneTab(reopenTab);
+    reopenClosedRightPaneTabById(reopenTab.id);
   };
   const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
     if (tab.kind === "character_sheet") {
@@ -5489,6 +5487,13 @@ export function App(): JSX.Element {
   }, [activeRightPaneTab, validRightPaneTabs]);
   const visibleRightPaneTabIds = useMemo(() => new Set(visibleRightPaneTabs.map((tab) => tab.id)), [visibleRightPaneTabs]);
   const overflowRightPaneTabs = useMemo(() => validRightPaneTabs.filter((tab) => !visibleRightPaneTabIds.has(tab.id)), [validRightPaneTabs, visibleRightPaneTabIds]);
+  const reopenableClosedRightPaneTabs = useMemo(() => closedRightPaneTabs
+    .map((tab) => {
+      if (tab.kind === "character_sheet") return buildRightPaneCharacterTab(tab.targetId);
+      if (tab.kind === "thread") return buildRightPaneThreadTab(tab.targetId);
+      return null;
+    })
+    .filter((tab): tab is RightPaneTab => !!tab), [closedRightPaneTabs, orgAgents]);
   const commandPaletteOpenTabItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const rows = validRightPaneTabs.map((tab) => {
@@ -8219,7 +8224,21 @@ export function App(): JSX.Element {
           <section className="so-panel">
             <div className="row-head">
               <strong>Session Tabs</strong>
-              <small>{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
+              <div className="composer-actions">
+                {reopenableClosedRightPaneTabs.length ? (
+                  <details className="right-pane-tab-overflow">
+                    <summary title="Reopen recently closed tab">Reopen</summary>
+                    <div className="right-pane-tab-overflow-menu so-panel">
+                      {reopenableClosedRightPaneTabs.map((tab) => (
+                        <div key={tab.id} className="right-pane-tab-overflow-row" title={tab.title}>
+                          <button type="button" onClick={() => reopenClosedRightPaneTabById(tab.id)}>{tab.label}</button>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ) : null}
+                <small>{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
+              </div>
             </div>
             <div className="composer-actions right-pane-tab-strip">
               {visibleRightPaneTabs.map((tab) => {

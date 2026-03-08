@@ -37,6 +37,8 @@ For Task/Result field-level detail, see `docs/spec_task_result.md`.
 - `tools/recipes_update.ps1`: recipes catalog generator and drift checker (`-DryRun -Json`).
 - `tools/contract_index_update.ps1`: contract index generator and drift checker (`-DryRun -Json`).
 - `tools/ui_smoke.ps1`: UI API availability smoke (`/api/ssot/recipes` 200 check).
+  - controlled repro on this machine: run in the same shell with explicit offline pin (`$env:REGION_AI_SMOKE_OFFLINE="1"`) before `ui_smoke` / gate.
+  - when the env pin is absent, offline mode may still be auto-detected from blocked `443` reachability; treat that as environment behavior rather than a product contract change.
 - `tools/ui_build_smoke.ps1`: ui_discord reproducible build smoke (`npm ci` + `ui:build`).
 - `tools/desktop_smoke.ps1`: desktop shell smoke (Electron shell checks plus Region UI assertions; `local_static_fallback` keeps static Region UI marker coverage when Electron runtime deps are unavailable).
 - UI runtime state (org/activity):
@@ -334,12 +336,18 @@ For Task/Result field-level detail, see `docs/spec_task_result.md`.
     - sheet memory snapshot uses existing memory APIs only (`/api/memory/:agent_id/:category?limit=...`) with no new backend endpoint.
   - UI Polish v1 policy (Star Office + Agent HQ inspirations):
     - scope is UI-only; backend API contracts stay unchanged.
-    - chat remains the primary surface; right pane remains the detail surface for `character-sheet`, inbox thread, tracker detail, and export payload views.
+    - chat remains the primary surface; right pane remains the detail surface for `character-sheet`, inbox thread, tracker detail, and run detail views.
     - existing routes are preserved and expanded with `office` (ControlRoom) and `debate` alongside `chat`, `workspace`, `dashboard`, `inbox thread`, and `character-sheet`.
     - Office/ControlRoom and Debate are stable first-class navigation surfaces; ControlRoom owns the visible quick-access strip for the current workspace.
     - quick access has two workspace-scoped modes: `favorites` and `recent`; favorites are shared across palette/office/debate/control-room pin sources, recent is shared MRU, and mode selection persists per workspace.
     - quick access stays compact: top 3 items are shown by default with overflow expand/collapse, favorites preserve manual order and slot numbering, and the same ordering feeds both the visible strip and command palette favorites.
-    - command palette is a one-step navigation surface for the current workspace state, with workspace-scoped favorites above shared recent target history.
+    - right-pane session tabs are the stable detail-session model for `character_sheet`, `thread`, `tracker`, and `run` targets.
+    - supported opens reuse the same right-pane tab activation path; duplicate targets focus the existing tab instead of opening a second tab.
+    - tab productivity is in-memory only and includes bounded tab count, keyboard switch/close/reopen, overflow menu, visible recently closed menu, and bulk close actions (`Close Others`, `Close Left`, `Close Right`, `Close Unpinned Tabs`, `Close All`).
+    - supported favorites and recent targets reopen through the same right-pane tab flow from quick access and command palette; unsupported targets stay outside tabs.
+    - workspace-scoped named worksets are localStorage-backed and support save current tabs, open/merge, replace current tabs, update from current tabs, rename, duplicate, delete, and command-palette actions.
+    - visible workset affordances stay compact: the tab area exposes save/open/update/replace management, quick access can save current tabs or open favorites as tabs, and the UI may show a strict exact-match hint when current tabs equal a saved workset.
+    - command palette is a one-step navigation surface for the current workspace state, with workspace-scoped favorites, recent targets, open tabs, recently closed tabs, and worksets.
     - right-pane/dashboard/workspace apply unified card/badge/mono-wrap styling to improve readability under long IDs/snippets/JSON.
 - Council autopilot runtime state:
   - `workspace/ui/council/runs/<run_id>.json` (status snapshot)

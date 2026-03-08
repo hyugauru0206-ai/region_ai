@@ -125,12 +125,16 @@
   - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_build_smoke.ps1 -Json`
   - If pack files are missing, `ui_build_smoke` fails with `deps_pack_missing`.
 - Smoke check:
-  - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Json`
-  - On restricted local machines, `node tools/ci_smoke_gate_runner.cjs` may explicitly pin offline mode for that run so `ui_smoke` and gate logs stay consistent.
+  - controlled same-shell sequence on this machine:
+    - PowerShell: `$env:REGION_AI_SMOKE_OFFLINE="1"`
+    - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/ui_smoke.ps1 -Json`
+    - `node tools/ci_smoke_gate_runner.cjs`
+  - On restricted local machines, keeping the explicit env pin in the same shell is the preferred reproduction path so standalone `ui_smoke` and gate logs stay aligned.
   - Network-limited mode (443 blocked):
     - PowerShell: `$env:REGION_AI_SMOKE_OFFLINE="1"`
     - cmd.exe: `set REGION_AI_SMOKE_OFFLINE=1`
     - `ui_smoke` adds `offline_mode=true` and `skipped_steps=[...]` in JSON while keeping legacy `*_ok` keys.
+    - Without the explicit pin, offline mode may still be auto-detected from blocked `443` reachability; treat that as environment behavior, not a different product mode.
     - After moving to a machine that can reach `github.com:443`, rerun smoke/gate without offline mode for full validation.
 - UI channels (additive):
   - `#メンバー`: org agents registry (status / assigned thread edit)
@@ -152,6 +156,11 @@
     - Control Room owns the visible quick-access strip for the current workspace.
     - quick access modes are `Favorites` and `Recent`: both are workspace-scoped, share the same compact shell, and only the selected mode persists per workspace.
     - favorites are pinned from command palette / office / debate / control room action points; favorites keep manual order + slot numbering and feed both the quick-access strip and palette favorites.
+    - stable right-pane tab targets are `Character Sheet`, `Thread`, `Tracker`, and `Run`.
+    - right-pane tabs are in-memory session tabs with duplicate-target reuse, keyboard switch/close/reopen, overflow handling, recently closed reopen menu, and bulk close actions.
+    - supported favorites and recent targets reopen through the same right-pane tab flow from quick access and command palette.
+    - workspace-scoped named worksets are localStorage-backed and support save/open/replace/update/rename/duplicate/delete from the tab-area controls and command palette.
+    - the UI may show a strict exact-match hint when the current right-pane tabs match a saved workset exactly.
     - visual unification: shared tokens/cards/badges/mono-wrap rules across dashboard, right pane, character-sheet, office, and debate.
     - one-click routes are preserved and emphasized: workspace seat -> Character Sheet, members list -> Character Sheet, sheet -> thread/inbox/memory.
 - UI hub API (additive):

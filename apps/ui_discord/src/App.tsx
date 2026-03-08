@@ -5686,6 +5686,26 @@ export function App(): JSX.Element {
   const openSupportedFavoritesAsRightPaneTabs = (): void => {
     openRightPaneTabs(supportedFavoriteRightPaneTabs);
   };
+  const getRightPaneWorksetTypeSummary = (workset: RightPaneWorkset): string => {
+    const counts = workset.targets.reduce((acc, target) => {
+      acc[target.kind] = (acc[target.kind] || 0) + 1;
+      return acc;
+    }, {} as Partial<Record<RightPaneTabKind, number>>);
+    const parts = [
+      counts.character_sheet ? `${counts.character_sheet} char` : "",
+      counts.thread ? `${counts.thread} thread` : "",
+      counts.tracker ? `${counts.tracker} tracker` : "",
+      counts.run ? `${counts.run} run` : "",
+    ].filter((part) => !!part);
+    return parts.join(" | ");
+  };
+  const isExactActiveRightPaneWorkset = (workset: RightPaneWorkset): boolean => {
+    if (workset.targets.length !== validRightPaneTabs.length) return false;
+    return workset.targets.every((target, index) => {
+      const activeTab = validRightPaneTabs[index] || null;
+      return !!activeTab && activeTab.kind === target.kind && activeTab.targetId === target.targetId;
+    });
+  };
   const saveCurrentTabsAsWorkset = (): void => {
     const targets = validRightPaneTabs.map((tab) => buildSavedRightPaneTarget(tab));
     if (!targets.length) {
@@ -5812,36 +5832,39 @@ export function App(): JSX.Element {
     const q = commandPaletteQuery.trim().toLowerCase();
     const rows = rightPaneWorksets.flatMap((workset) => {
       const countLabel = `${workset.targets.length} saved right-pane tab${workset.targets.length === 1 ? "" : "s"}`;
+      const typeLabel = getRightPaneWorksetTypeSummary(workset);
+      const activeLabel = isExactActiveRightPaneWorkset(workset) ? " | active" : "";
+      const detailLabel = `${countLabel}${typeLabel ? ` | ${typeLabel}` : ""}${activeLabel}`;
       return [
         {
           id: `workset_open_${workset.id}`,
-          title: `Workset: ${workset.name}`,
-          subtitle: `Open ${countLabel}`,
+          title: `Workset: ${workset.name}${isExactActiveRightPaneWorkset(workset) ? " (active)" : ""}`,
+          subtitle: `Open ${detailLabel}`,
           run: () => openRightPaneWorksetAsTabs(workset.id),
         },
         {
           id: `workset_rename_${workset.id}`,
           title: `Rename Workset: ${workset.name}`,
-          subtitle: countLabel,
+          subtitle: detailLabel,
           run: () => renameRightPaneWorkset(workset.id),
         },
         {
           id: `workset_duplicate_${workset.id}`,
           title: `Duplicate Workset: ${workset.name}`,
-          subtitle: countLabel,
+          subtitle: detailLabel,
           run: () => duplicateRightPaneWorkset(workset.id),
         },
         {
           id: `workset_delete_${workset.id}`,
           title: `Delete Workset: ${workset.name}`,
-          subtitle: countLabel,
+          subtitle: detailLabel,
           run: () => deleteRightPaneWorkset(workset.id),
         },
       ] as CommandPaletteItem[];
     });
     if (!q) return rows;
     return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
-  }, [commandPaletteQuery, rightPaneWorksets]);
+  }, [commandPaletteQuery, rightPaneWorksets, validRightPaneTabs]);
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -8548,7 +8571,7 @@ export function App(): JSX.Element {
               <div className="composer-actions">
                 {reopenableClosedRightPaneTabs.length ? (
                   <details className="right-pane-tab-overflow">
-                    <summary title="Reopen recently closed tab">Reopen</summary>
+                    <summary title="Reopen recently closed tab (Alt+Shift+T)">Reopen</summary>
                     <div className="right-pane-tab-overflow-menu so-panel">
                       {reopenableClosedRightPaneTabs.map((tab) => (
                         <div key={tab.id} className="right-pane-tab-overflow-row" title={tab.title}>
@@ -8564,7 +8587,7 @@ export function App(): JSX.Element {
                     </div>
                   </details>
                 ) : null}
-                <small>{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
+                <small title="Keyboard: Alt+Shift+Left/Right switch tabs, Alt+Shift+W closes active tab, Alt+Shift+T reopens last closed tab">{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
               </div>
             </div>
             <div className="composer-actions right-pane-tab-strip">
@@ -8633,16 +8656,21 @@ export function App(): JSX.Element {
                         <button type="button" className="inline-link" onClick={() => saveCurrentTabsAsWorkset()}>Save Current Tabs as Workset</button>
                       </div>
                     ) : null}
-                    {rightPaneWorksets.map((workset) => (
+                    {rightPaneWorksets.map((workset) => {
+                      const typeLabel = getRightPaneWorksetTypeSummary(workset);
+                      const isActiveWorkset = isExactActiveRightPaneWorkset(workset);
+                      return (
                       <div key={workset.id} className="right-pane-tab-overflow-row">
-                        <button type="button" className="inline-link" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name} (${workset.targets.length})`}</button>
-                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); openRightPaneWorksetAsTabs(workset.id, true); }}>Replace</button>
-                        {validRightPaneTabs.length ? <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); updateRightPaneWorksetFromCurrentTabs(workset.id); }}>Update</button> : null}
-                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); renameRightPaneWorkset(workset.id); }}>Rename</button>
-                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); duplicateRightPaneWorkset(workset.id); }}>Duplicate</button>
+                        <button type="button" className="inline-link" title="Open/merge this saved workset into current right-pane tabs" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name} (${workset.targets.length})${isActiveWorkset ? " (active)" : ""}`}</button>
+                        {typeLabel ? <span className="so-muted">{typeLabel}</span> : null}
+                        <button type="button" className="inline-link" title="Replace current right-pane tabs with this workset" onClick={(e) => { e.stopPropagation(); openRightPaneWorksetAsTabs(workset.id, true); }}>Replace</button>
+                        {validRightPaneTabs.length ? <button type="button" className="inline-link" title="Update this workset from the current right-pane tabs" onClick={(e) => { e.stopPropagation(); updateRightPaneWorksetFromCurrentTabs(workset.id); }}>Update</button> : null}
+                        <button type="button" className="inline-link" title="Rename this workset" onClick={(e) => { e.stopPropagation(); renameRightPaneWorkset(workset.id); }}>Rename</button>
+                        <button type="button" className="inline-link" title="Duplicate this workset" onClick={(e) => { e.stopPropagation(); duplicateRightPaneWorkset(workset.id); }}>Duplicate</button>
                         <button type="button" className="inline-link" title="Delete workset" onClick={(e) => { e.stopPropagation(); deleteRightPaneWorkset(workset.id); }}>Delete</button>
                       </div>
-                    ))}
+                      );
+                    })}
                     {validRightPaneTabs.some((tab) => buildFavoriteItemFromRightPaneTab(tab) && !isRightPaneTabFavorited(tab)) ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => pinAllSupportedOpenTabs()}>Pin All Supported Open Tabs</button>

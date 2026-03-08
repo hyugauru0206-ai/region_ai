@@ -5431,31 +5431,42 @@ export function App(): JSX.Element {
     if (!nextTab) return;
     switchRightPaneTab(nextTab.id);
   };
-  const closeRightPaneTab = (tabId: string): void => {
-    const currentIndex = validRightPaneTabs.findIndex((item) => item.id === tabId);
-    if (currentIndex < 0) return;
-    const closingTab = validRightPaneTabs[currentIndex] || null;
-    const nextTabs = validRightPaneTabs.filter((item) => item.id !== tabId);
-    if (closingTab) {
-      setClosedRightPaneTabs((prev) => [closingTab, ...prev.filter((item) => item.id !== closingTab.id)].slice(0, CLOSED_RIGHT_PANE_TAB_LIMIT));
-    }
+  const closeRightPaneTabsByIds = (tabIds: string[], preferredActiveTabId = ""): void => {
+    const closingIdSet = new Set(tabIds.map((id) => String(id || "").trim()).filter((id) => !!id));
+    if (!closingIdSet.size) return;
+    const closingTabs = validRightPaneTabs.filter((tab) => closingIdSet.has(tab.id));
+    if (!closingTabs.length) return;
+    const nextTabs = validRightPaneTabs.filter((tab) => !closingIdSet.has(tab.id));
+    setClosedRightPaneTabs((prev) => [...closingTabs.slice().reverse(), ...prev.filter((item) => !closingIdSet.has(item.id))].slice(0, CLOSED_RIGHT_PANE_TAB_LIMIT));
     setRightPaneTabs(nextTabs);
-    if (closingTab?.kind === "character_sheet" && String(characterSheetAgentId || "").trim() === closingTab.targetId) {
+    const nextActiveTab = (preferredActiveTabId ? nextTabs.find((tab) => tab.id === preferredActiveTabId) : null) || null;
+    if (!nextActiveTab) {
+      setActiveRightPaneTabId("");
       setCharacterSheetAgentId("");
       setCharacterSheetLiveActivity([]);
       setCharacterSheetActivityStatus("idle");
-    }
-    if (closingTab?.kind === "thread" && String(inboxThreadViewKey || "").trim().toLowerCase() === closingTab.targetId) {
       closeRightPaneThreadDetail();
-    }
-    if (activeRightPaneTabId !== tabId) return;
-    const fallbackTab = nextTabs[Math.min(currentIndex, nextTabs.length - 1)] || nextTabs[nextTabs.length - 1] || null;
-    setActiveRightPaneTabId(fallbackTab?.id || "");
-    if (fallbackTab) {
-      syncRightPaneTab(fallbackTab);
       return;
     }
-    closeRightPaneThreadDetail();
+    setActiveRightPaneTabId(nextActiveTab.id);
+    syncRightPaneTab(nextActiveTab);
+  };
+  const closeRightPaneTab = (tabId: string): void => {
+    const currentIndex = validRightPaneTabs.findIndex((item) => item.id === tabId);
+    if (currentIndex < 0) return;
+    const nextTabs = validRightPaneTabs.filter((item) => item.id !== tabId);
+    const fallbackTab = activeRightPaneTabId === tabId
+      ? (nextTabs[Math.min(currentIndex, nextTabs.length - 1)] || nextTabs[nextTabs.length - 1] || null)
+      : (activeRightPaneTab || null);
+    closeRightPaneTabsByIds([tabId], fallbackTab?.id || "");
+  };
+  const closeOtherRightPaneTabs = (tabId: string): void => {
+    const keepTab = validRightPaneTabs.find((tab) => tab.id === tabId) || null;
+    if (!keepTab) return;
+    closeRightPaneTabsByIds(validRightPaneTabs.filter((tab) => tab.id !== tabId).map((tab) => tab.id), keepTab.id);
+  };
+  const closeAllRightPaneTabs = (): void => {
+    closeRightPaneTabsByIds(validRightPaneTabs.map((tab) => tab.id));
   };
   const reopenClosedRightPaneTabById = (tabId: string): void => {
     const reopenTab = reopenableClosedRightPaneTabs.find((tab) => tab.id === tabId) || null;
@@ -8277,6 +8288,16 @@ export function App(): JSX.Element {
                         </div>
                       );
                     })}
+                    {activeRightPaneTab && validRightPaneTabs.length > 1 ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => closeOtherRightPaneTabs(activeRightPaneTab.id)}>Close Others</button>
+                      </div>
+                    ) : null}
+                    {validRightPaneTabs.length ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => closeAllRightPaneTabs()}>Close All</button>
+                      </div>
+                    ) : null}
                   </div>
                 </details>
               ) : null}

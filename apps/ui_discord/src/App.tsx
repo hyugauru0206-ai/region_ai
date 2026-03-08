@@ -5706,6 +5706,11 @@ export function App(): JSX.Element {
       return !!activeTab && activeTab.kind === target.kind && activeTab.targetId === target.targetId;
     });
   };
+  const activeExactRightPaneWorkset = rightPaneWorksets.find((workset) => isExactActiveRightPaneWorkset(workset)) || null;
+  const openCommandPaletteToWorksets = (): void => {
+    setCommandPaletteOpen(true);
+    setCommandPaletteQuery("Workset:");
+  };
   const saveCurrentTabsAsWorkset = (): void => {
     const targets = validRightPaneTabs.map((tab) => buildSavedRightPaneTarget(tab));
     if (!targets.length) {
@@ -7300,6 +7305,8 @@ export function App(): JSX.Element {
                   <div className="composer-actions">
                     <button type="button" className={quickAccessMode === "favorites" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "favorites"} onClick={() => setQuickAccessMode("favorites")}>Favorites</button>
                     <button type="button" className={quickAccessMode === "recent" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "recent"} onClick={() => setQuickAccessMode("recent")}>Recent</button>
+                    {supportedFavoriteRightPaneTabs.length ? <button type="button" title="Open this workspace's supported favorites as right-pane tabs" onClick={() => openSupportedFavoritesAsRightPaneTabs()}>Open Favorites as Tabs</button> : null}
+                    {validRightPaneTabs.length ? <button type="button" title="Save the current right-pane tabs as a new workspace workset" onClick={() => saveCurrentTabsAsWorkset()}>Save as Workset</button> : null}
                   </div>
                 </div>
                 {visibleQuickAccessItems.length ? (
@@ -7319,6 +7326,7 @@ export function App(): JSX.Element {
                 ) : (
                   <div className="so-muted">{quickAccessEmptyText}</div>
                 )}
+                {activeExactRightPaneWorkset ? <div className="so-muted">Current tabs match workset: {activeExactRightPaneWorkset.name}</div> : null}
               </div>
               <div className="office-grid">
                 <div className="so-card">
@@ -7423,6 +7431,7 @@ export function App(): JSX.Element {
                   <span className="so-muted">workspace={officeWorkspaceKey}</span>
                   <button type="button" className={quickAccessMode === "favorites" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "favorites"} onClick={() => setQuickAccessMode("favorites")}>Favorites</button>
                   <button type="button" className={quickAccessMode === "recent" ? "inline-link" : undefined} aria-pressed={quickAccessMode === "recent"} onClick={() => setQuickAccessMode("recent")}>Recent</button>
+                  <button type="button" title="Open saved workspace worksets in the command palette" onClick={() => openCommandPaletteToWorksets()}>Worksets</button>
                   <span className="so-muted">drag to reorder seats</span>
                   <button type="button" onClick={() => resetOfficeLayout()}>Reset layout</button>
                 </div>

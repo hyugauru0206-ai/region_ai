@@ -52,7 +52,7 @@ type CommandPaletteRecentItem = {
 };
 
 type QuickAccessMode = "favorites" | "recent";
-type RightPaneTabKind = "character_sheet" | "thread";
+type RightPaneTabKind = "character_sheet" | "thread" | "tracker";
 type RightPaneTab = {
   id: string;
   kind: RightPaneTabKind;
@@ -3022,6 +3022,15 @@ export function App(): JSX.Element {
     setActiveChannel("inbox");
   }
 
+  function openTrackerDetail(trackerIdInput?: string): void {
+    const trackerId = String(trackerIdInput || activeExecutionTracker?.id || "").trim();
+    if (!trackerId) {
+      showToast("tracker missing");
+      return;
+    }
+    activateRightPaneTab(buildRightPaneTrackerTab(trackerId));
+  }
+
   function openTrackerThread(threadKeyInput?: string): void {
     const key = String(threadKeyInput || activeExecutionTracker?.threadKey || "").trim().toLowerCase();
     if (!isValidInboxThreadKey(key)) {
@@ -3229,6 +3238,13 @@ export function App(): JSX.Element {
     executionTrackerTimerRef.current = window.setTimeout(() => {
       void pollExecutionTrackerOnce();
     }, tracker.nextDelayMs);
+    activateRightPaneTab({
+      id: `right_pane_tracker_${tracker.id}`,
+      kind: "tracker",
+      targetId: tracker.id,
+      label: `Tracker ${formatCompactTargetId("trk", tracker.runId || tracker.id)}`,
+      title: tracker.runId ? `Tracker: ${tracker.id} | run ${tracker.runId}` : `Tracker: ${tracker.id}`,
+    });
     showToast("Tracking re-opened");
   }
 
@@ -5380,15 +5396,36 @@ export function App(): JSX.Element {
     }
     return null;
   };
+  const buildRightPaneTrackerTab = (trackerIdInput?: string): RightPaneTab | null => {
+    const trackerId = String(trackerIdInput || activeExecutionTracker?.id || "").trim();
+    if (!trackerId) return null;
+    if (String(activeExecutionTracker?.id || "").trim() !== trackerId) return null;
+    const runId = String(activeExecutionTracker?.runId || "").trim();
+    const labelId = runId || trackerId;
+    return {
+      id: `right_pane_tracker_${trackerId}`,
+      kind: "tracker",
+      targetId: trackerId,
+      label: `Tracker ${formatCompactTargetId("trk", labelId)}`,
+      title: runId ? `Tracker: ${trackerId} | run ${runId}` : `Tracker: ${trackerId}`,
+    };
+  };
   const isRightPaneTabFavorited = (tab: RightPaneTab): boolean => {
     const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
     return favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
   };
-  const getRightPaneTabTypeLabel = (tab: RightPaneTab): string => (tab.kind === "character_sheet" ? "CHAR" : "THREAD");
+  const getRightPaneTabTypeLabel = (tab: RightPaneTab): string => {
+    if (tab.kind === "character_sheet") return "CHAR";
+    if (tab.kind === "tracker") return "TRACKER";
+    return "THREAD";
+  };
   const syncRightPaneTab = (tab: RightPaneTab): void => {
     if (tab.kind === "character_sheet") {
       setCharacterSheetAgentId(tab.targetId);
       setCharacterSheetLastAgentId(tab.targetId);
+      return;
+    }
+    if (tab.kind === "tracker") {
       return;
     }
     setInboxThreadViewItems([]);
@@ -5507,10 +5544,14 @@ export function App(): JSX.Element {
     if (tab.kind === "character_sheet") {
       return orgAgents.some((agent) => String(agent.id || "").trim() === tab.targetId);
     }
+    if (tab.kind === "tracker") {
+      return String(activeExecutionTracker?.id || "").trim() === tab.targetId;
+    }
     return isValidInboxThreadKey(tab.targetId);
-  }), [orgAgents, rightPaneTabs]);
+  }), [activeExecutionTracker?.id, orgAgents, rightPaneTabs]);
   const activeRightPaneTab = validRightPaneTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
   const activeRightPaneThreadKey = activeRightPaneTab?.kind === "thread" ? activeRightPaneTab.targetId : "";
+  const activeRightPaneTracker = activeRightPaneTab?.kind === "tracker" && String(activeExecutionTracker?.id || "").trim() === activeRightPaneTab.targetId ? activeExecutionTracker : null;
   const visibleRightPaneTabs = useMemo(() => {
     if (validRightPaneTabs.length <= RIGHT_PANE_VISIBLE_TAB_LIMIT) return validRightPaneTabs;
     const preferred = validRightPaneTabs.slice(-RIGHT_PANE_VISIBLE_TAB_LIMIT);
@@ -5523,17 +5564,18 @@ export function App(): JSX.Element {
     .map((tab) => {
       if (tab.kind === "character_sheet") return buildRightPaneCharacterTab(tab.targetId);
       if (tab.kind === "thread") return buildRightPaneThreadTab(tab.targetId);
+      if (tab.kind === "tracker") return buildRightPaneTrackerTab(tab.targetId);
       return null;
     })
-    .filter((tab): tab is RightPaneTab => !!tab), [closedRightPaneTabs, orgAgents]);
+    .filter((tab): tab is RightPaneTab => !!tab), [activeExecutionTracker?.id, activeExecutionTracker?.runId, closedRightPaneTabs, orgAgents]);
   const commandPaletteOpenTabItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const rows = validRightPaneTabs.map((tab) => {
       const isActive = tab.id === activeRightPaneTabId;
       return {
-        id: tab.kind === "character_sheet" ? `agent_${tab.targetId}` : `thread_${tab.targetId}`,
+        id: tab.kind === "character_sheet" ? `agent_${tab.targetId}` : (tab.kind === "tracker" ? `tracker_tab_${tab.targetId}` : `thread_${tab.targetId}`),
         title: `Open Tab: ${tab.label}${isActive ? " (active)" : ""}`,
-        subtitle: tab.kind === "character_sheet" ? "Focus open character sheet" : "Focus open thread detail",
+        subtitle: tab.kind === "character_sheet" ? "Focus open character sheet" : (tab.kind === "tracker" ? "Focus open tracker detail" : "Focus open thread detail"),
         run: () => switchRightPaneTab(tab.id),
       } as CommandPaletteItem;
     });
@@ -6673,6 +6715,7 @@ export function App(): JSX.Element {
                   {activeExecutionTracker.threadKey ? (
                     <button type="button" onClick={() => openTrackerThread()}>Open thread</button>
                   ) : null}
+                  <button type="button" onClick={() => openTrackerDetail()}>Open tracker detail</button>
                   {activeExecutionTracker.requestId ? (
                     <button type="button" onClick={() => void copyTrackerValue(String(activeExecutionTracker.requestId || ""))}>Copy request_id</button>
                   ) : null}
@@ -8364,7 +8407,7 @@ export function App(): JSX.Element {
         <section className="character-sheet-panel raPanel so-panel">
           <div className="so-header">
             <div>
-              <strong>{activeRightPaneTab?.kind === "thread" ? "Thread" : "Character Sheet"}</strong>
+              <strong>{activeRightPaneTab?.kind === "thread" ? "Thread" : (activeRightPaneTab?.kind === "tracker" ? "Tracker" : "Character Sheet")}</strong>
               <div className="so-muted">Right pane / session detail</div>
             </div>
             <div className="composer-actions">
@@ -8384,6 +8427,12 @@ export function App(): JSX.Element {
                   <button type="button" title="Open inbox" onClick={() => setActiveChannel("inbox")}>Inbox</button>
                   <button type="button" title="Refresh thread" onClick={() => { setActiveChannel("inbox"); void loadInboxThreadView(activeRightPaneThreadKey, 20); }}>Refresh</button>
                   <button type="button" title="Close thread" onClick={() => closeRightPaneTab(activeRightPaneTab.id)}>Close</button>
+                </>
+              ) : null}
+              {activeRightPaneTab?.kind === "tracker" && activeRightPaneTracker ? (
+                <>
+                  <button type="button" title="Refresh tracker" disabled={activeRightPaneTracker.status !== "polling" || executionTrackerPollInflightRef.current} onClick={() => void refreshExecutionTrackerNow()}>Refresh</button>
+                  <button type="button" title="Close tracker" onClick={() => closeRightPaneTab(activeRightPaneTab.id)}>Close</button>
                 </>
               ) : null}
             </div>
@@ -8517,8 +8566,32 @@ export function App(): JSX.Element {
                 </div>
               </div>
             </div>
+          ) : activeRightPaneTab?.kind === "tracker" && activeRightPaneTracker ? (
+            <div className="character-sheet-body">
+              <div className="character-sheet-card so-card">
+                <div className="row-head">
+                  <strong>{activeRightPaneTab.label}</strong>
+                  <span className={`workspace-status-badge status-${activeRightPaneTracker.status === "success" ? "idle" : (activeRightPaneTracker.status === "polling" ? "writing" : "error")}`}>{activeRightPaneTracker.status}</span>
+                </div>
+                <div className="raKvRow"><span className="raKvKey">tracker_id</span><code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneTracker.id}</code></div>
+                <div className="raKvRow"><span className="raKvKey">kind</span><span className="raKvVal raWrapAnywhere">{activeRightPaneTracker.kind}</span></div>
+                <div className="raKvRow"><span className="raKvKey">started_at</span><span className="raKvVal raWrapAnywhere">{new Date(activeRightPaneTracker.startedAt).toISOString()}</span></div>
+                <div className="raKvRow"><span className="raKvKey">request_id</span><code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneTracker.requestId || "-"}</code></div>
+                <div className="raKvRow"><span className="raKvKey">run_id</span><code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneTracker.runId || "-"}</code></div>
+                <div className="raKvRow"><span className="raKvKey">thread_key</span><code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneTracker.threadKey || "-"}</code></div>
+                <div className="composer-actions">
+                  {activeRightPaneTracker.runId ? <button type="button" onClick={() => jumpToRun(String(activeRightPaneTracker.runId || ""))}>Open run</button> : null}
+                  {activeRightPaneTracker.requestId ? <button type="button" onClick={() => goTrackerRequestToInbox()}>Go to #inbox</button> : null}
+                  {activeRightPaneTracker.threadKey ? <button type="button" onClick={() => openTrackerThread(activeRightPaneTracker.threadKey)}>Open thread</button> : null}
+                  {activeRightPaneTracker.requestId ? <button type="button" onClick={() => void copyTrackerValue(String(activeRightPaneTracker.requestId || ""))}>Copy request_id</button> : null}
+                  {activeRightPaneTracker.runId ? <button type="button" onClick={() => void copyTrackerValue(String(activeRightPaneTracker.runId || ""))}>Copy run_id</button> : null}
+                </div>
+                {activeRightPaneTracker.lastError ? <div className="empty dangerText wrapAnywhere">error: {activeRightPaneTracker.lastError}</div> : null}
+                {activeRightPaneTracker.lastPayload ? <pre className="jsonOutput">{JSON.stringify(activeRightPaneTracker.lastPayload, null, 2)}</pre> : <div className="empty">No tracker payload yet</div>}
+              </div>
+            </div>
           ) : (
-            <div className="empty">Open a character or thread to keep it handy in the right pane.</div>
+            <div className="empty">Open a character, thread, or tracker to keep it handy in the right pane.</div>
           )}
         </section>
         {activeChannel === "inbox" && (

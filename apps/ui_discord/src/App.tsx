@@ -5430,6 +5430,23 @@ export function App(): JSX.Element {
       title: `Run: ${runId}`,
     };
   };
+  const buildRightPaneTabFromStoredTarget = (item: Pick<CommandPaletteRecentItem, "id"> | null): RightPaneTab | null => {
+    const itemId = String(item?.id || "").trim();
+    if (!itemId) return null;
+    if (itemId.startsWith("character_sheet_") || itemId.startsWith("agent_")) {
+      return buildRightPaneCharacterTab(String(itemId.replace(/^character_sheet_/, "").replace(/^agent_/, "") || "").trim());
+    }
+    if (itemId.startsWith("thread_")) {
+      return buildRightPaneThreadTab(String(itemId.slice("thread_".length) || "").trim().toLowerCase());
+    }
+    if (itemId.startsWith("tracker_")) {
+      return buildRightPaneTrackerTab(String(itemId.slice("tracker_".length) || "").trim());
+    }
+    if (itemId.startsWith("run_")) {
+      return buildRightPaneRunTab(String(itemId.slice("run_".length) || "").trim());
+    }
+    return null;
+  };
   const isRightPaneTabFavorited = (tab: RightPaneTab): boolean => {
     const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
     return favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
@@ -5583,6 +5600,15 @@ export function App(): JSX.Element {
   };
   const clearClosedRightPaneTabs = (): void => {
     setClosedRightPaneTabs([]);
+  };
+  const supportedFavoriteRightPaneTabs = commandPaletteFavorites
+    .map((item) => buildRightPaneTabFromStoredTarget(item))
+    .filter((tab): tab is RightPaneTab => !!tab);
+  const openSupportedFavoritesAsRightPaneTabs = (): void => {
+    if (!supportedFavoriteRightPaneTabs.length) return;
+    supportedFavoriteRightPaneTabs.forEach((tab) => registerRightPaneTab(tab));
+    const lastTab = supportedFavoriteRightPaneTabs[supportedFavoriteRightPaneTabs.length - 1] || null;
+    if (lastTab) syncRightPaneTab(lastTab);
   };
   const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
     if (tab.kind === "character_sheet") {
@@ -8430,6 +8456,11 @@ export function App(): JSX.Element {
                     {activeRightPaneTab && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) >= 0 && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) < validRightPaneTabs.length - 1 ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => closeRightRightPaneTabs(activeRightPaneTab.id)}>Close Right</button>
+                      </div>
+                    ) : null}
+                    {supportedFavoriteRightPaneTabs.length ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => openSupportedFavoritesAsRightPaneTabs()}>Open Favorites as Tabs</button>
                       </div>
                     ) : null}
                     {validRightPaneTabs.some((tab) => buildFavoriteItemFromRightPaneTab(tab) && !isRightPaneTabFavorited(tab)) ? (

@@ -3028,6 +3028,8 @@ export function App(): JSX.Element {
       showToast("tracker missing");
       return;
     }
+    const trackerRunId = String(String(activeExecutionTracker?.id || "").trim() === trackerId ? (activeExecutionTracker?.runId || "") : "").trim();
+    recordTrackerRecentTarget(trackerId, trackerRunId || undefined);
     activateRightPaneTab(buildRightPaneTrackerTab(trackerId));
   }
 
@@ -3238,6 +3240,7 @@ export function App(): JSX.Element {
     executionTrackerTimerRef.current = window.setTimeout(() => {
       void pollExecutionTrackerOnce();
     }, tracker.nextDelayMs);
+    recordTrackerRecentTarget(tracker.id, tracker.runId ? String(tracker.runId || "").trim() : undefined);
     activateRightPaneTab({
       id: `right_pane_tracker_${tracker.id}`,
       kind: "tracker",
@@ -5342,10 +5345,11 @@ export function App(): JSX.Element {
     const stableId = String(targetId || "").trim();
     const stableRunId = String(runId || "").trim();
     if (!stableId) return null;
+    if (String(activeExecutionTracker?.id || "").trim() !== stableId) return null;
     return {
       id: "tracker_" + stableId,
       title: "Tracker: " + formatCompactTargetId("trk", stableId),
-      subtitle: stableRunId ? "Open tracked run " + formatCompactTargetId("run", stableRunId) : "Open current tracker thread",
+      subtitle: stableRunId ? "Open current tracker detail | run " + formatCompactTargetId("run", stableRunId) : "Open current tracker detail",
     };
   };
   const buildRunTargetEntry = (runId: string): CommandPaletteRecentItem | null => {
@@ -5392,6 +5396,10 @@ export function App(): JSX.Element {
     }
     if (tab.kind === "thread") {
       return buildThreadTargetEntry(tab.targetId);
+    }
+    if (tab.kind === "tracker") {
+      const trackerRunId = String(String(activeExecutionTracker?.id || "").trim() === tab.targetId ? (activeExecutionTracker?.runId || "") : "").trim();
+      return buildTrackerTargetEntry(tab.targetId, trackerRunId || undefined);
     }
     if (tab.kind === "run") {
       return buildRunTargetEntry(tab.targetId);
@@ -5723,21 +5731,14 @@ export function App(): JSX.Element {
     const activeTrackerThreadKey = isValidInboxThreadKey(String(activeExecutionTracker?.threadKey || "").trim().toLowerCase())
       ? String(activeExecutionTracker?.threadKey || "").trim().toLowerCase()
       : activeThreadKey;
+    const activeTrackerId = String(activeExecutionTracker?.id || "").trim();
     const activeTrackerRunId = String(activeExecutionTracker?.runId || taskifyTrackingItem?.run_id || "").trim();
-    const activeTrackerRecentKey = String(activeTrackerRunId || activeExecutionTracker?.id || activeTrackerThreadKey || "").trim();
-    if (activeTrackerRecentKey && (activeTrackerRunId || activeTrackerThreadKey)) {
+    if (activeTrackerId) {
       pushRow({
-        id: `tracker_${activeTrackerRecentKey}`,
-        title: `Tracker: ${formatCompactTargetId("trk", activeTrackerRecentKey)}`,
-        subtitle: activeTrackerRunId ? `Open tracked run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker thread",
-        run: () => {
-          recordTrackerRecentTarget(activeTrackerRecentKey, activeTrackerRunId ? activeTrackerRunId : undefined);
-          if (activeTrackerRunId) {
-            jumpToRun(activeTrackerRunId);
-            return;
-          }
-          openTrackerThread(activeTrackerThreadKey);
-        },
+        id: `tracker_${activeTrackerId}`,
+        title: `Tracker: ${formatCompactTargetId("trk", activeTrackerId)}`,
+        subtitle: activeTrackerRunId ? `Open current tracker detail | run ${formatCompactTargetId("run", activeTrackerRunId)}` : "Open current tracker detail",
+        run: () => openTrackerDetail(activeTrackerId),
       });
     }
     const activeRunId = String(activeExecutionTracker?.runId || councilStatus?.run?.run_id || taskifyTrackingItem?.run_id || "").trim();
@@ -5783,17 +5784,11 @@ export function App(): JSX.Element {
     }
     if (item.id.startsWith("tracker_")) {
       const trackerTarget = String(item.id.slice("tracker_".length) || "").trim();
-      if (!trackerTarget) return null;
+      const trackerItem = buildTrackerTargetEntry(trackerTarget, String(String(activeExecutionTracker?.id || "").trim() === trackerTarget ? (activeExecutionTracker?.runId || "") : "").trim() || undefined);
+      if (!trackerItem) return null;
       return {
-        ...item,
-        run: () => {
-          recordRecentTarget(item);
-          if (isValidInboxThreadKey(trackerTarget)) {
-            openTrackerThread(trackerTarget);
-            return;
-          }
-          jumpToRun(trackerTarget);
-        },
+        ...trackerItem,
+        run: () => openTrackerDetail(trackerTarget),
       };
     }
     if (item.id.startsWith("run_")) {
@@ -5806,7 +5801,7 @@ export function App(): JSX.Element {
   const workspaceFavoriteItems = useMemo(() => {
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
     return resolveStoredCommandPaletteItems(commandPaletteFavorites, itemMap, resolveStoredFavoriteItem, FAVORITE_TARGET_LIMIT);
-  }, [commandPaletteFavorites, commandPaletteItems, orgAgents]);
+  }, [activeExecutionTracker?.id, activeExecutionTracker?.runId, commandPaletteFavorites, commandPaletteItems, orgAgents]);
   const commandPaletteFavoriteItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     return filterCommandPaletteItemsByQuery(workspaceFavoriteItems, q).slice(0, FAVORITE_TARGET_LIMIT);
@@ -5918,11 +5913,11 @@ export function App(): JSX.Element {
     const q = commandPaletteQuery.trim().toLowerCase();
     const itemMap = new Map(commandPaletteItems.map((item) => [item.id, item]));
     return filterCommandPaletteItemsByQuery(
-      resolveStoredCommandPaletteItems(commandPaletteRecent, itemMap, (item, lookup) => lookup.get(item.id) || null, RECENT_TARGET_LIMIT)
+      resolveStoredCommandPaletteItems(commandPaletteRecent, itemMap, resolveStoredFavoriteItem, RECENT_TARGET_LIMIT)
         .filter((item) => !favoriteTargetIds.has(item.id)),
       q,
     ).slice(0, RECENT_TARGET_LIMIT);
-  }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecent, favoriteTargetIds]);
+  }, [activeExecutionTracker?.id, activeExecutionTracker?.runId, commandPaletteItems, commandPaletteQuery, commandPaletteRecent, favoriteTargetIds, orgAgents]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const hiddenIds = new Set([...commandPaletteFavoriteItems.map((item) => item.id), ...commandPaletteRecentItems.map((item) => item.id), ...commandPaletteOpenTabItems.map((item) => item.id), ...commandPaletteClosedTabItems.map((item) => item.id)]);

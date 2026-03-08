@@ -61,6 +61,17 @@ type RightPaneTab = {
   title: string;
 };
 
+type RightPaneSavedTarget = {
+  kind: RightPaneTabKind;
+  targetId: string;
+};
+
+type RightPaneWorkset = {
+  id: string;
+  name: string;
+  targets: RightPaneSavedTarget[];
+};
+
 type ApiResp<T> = { ok: boolean; data: T };
 type DesktopSettings = {
   api_base_url: string;
@@ -962,6 +973,7 @@ const FAVORITE_TARGET_LIMIT = 6;
 const QUICK_ACCESS_VISIBLE_LIMIT = 3;
 const RIGHT_PANE_TAB_LIMIT = 5;
 const CLOSED_RIGHT_PANE_TAB_LIMIT = 8;
+const RIGHT_PANE_WORKSET_LIMIT = 5;
 const RIGHT_PANE_VISIBLE_TAB_LIMIT = 3;
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
@@ -1119,6 +1131,45 @@ function getFavoriteTargetsStorageKey(workspaceKey: string): string {
 
 function getQuickAccessModeStorageKey(workspaceKey: string): string {
   return `${QUICK_ACCESS_MODE_STORAGE_KEY}.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
+function getRightPaneWorksetsStorageKey(workspaceKey: string): string {
+  return `region_ai.right_pane_worksets.v1.${sanitizeOfficeWorkspaceKey(workspaceKey)}`;
+}
+
+function readStoredRightPaneWorksets(key: string, maxItems = RIGHT_PANE_WORKSET_LIMIT): RightPaneWorkset[] {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map((item) => {
+        if (!item || typeof item !== "object" || Array.isArray(item)) return null;
+        const row = item as Record<string, unknown>;
+        const id = String(row.id || "").trim();
+        const name = String(row.name || "").trim();
+        const targets = Array.isArray(row.targets)
+          ? row.targets
+            .map((target) => {
+              if (!target || typeof target !== "object" || Array.isArray(target)) return null;
+              const targetRow = target as Record<string, unknown>;
+              const kind = String(targetRow.kind || "").trim() as RightPaneTabKind;
+              const targetId = String(targetRow.targetId || "").trim();
+              if (!(kind === "character_sheet" || kind === "thread" || kind === "tracker" || kind === "run")) return null;
+              if (!targetId) return null;
+              return { kind, targetId };
+            })
+            .filter((target): target is RightPaneSavedTarget => !!target)
+          : [];
+        if (!id || !name || !targets.length) return null;
+        return { id, name, targets };
+      })
+      .filter((item): item is RightPaneWorkset => !!item)
+      .slice(0, Math.max(1, maxItems));
+  } catch {
+    return [];
+  }
 }
 
 function readStoredQuickAccessMode(workspaceKey: string): QuickAccessMode {
@@ -1514,6 +1565,7 @@ export function App(): JSX.Element {
   const [commandPaletteQuery, setCommandPaletteQuery] = useState("");
   const [commandPaletteRecent, setCommandPaletteRecent] = useState<CommandPaletteRecentItem[]>(() => readStoredCommandPaletteRecent(getRecentTargetsStorageKey(resolveOfficeWorkspaceKey()), true));
   const [commandPaletteFavorites, setCommandPaletteFavorites] = useState<CommandPaletteRecentItem[]>(() => readStoredTargetEntries(getFavoriteTargetsStorageKey(resolveOfficeWorkspaceKey()), FAVORITE_TARGET_LIMIT));
+  const [rightPaneWorksets, setRightPaneWorksets] = useState<RightPaneWorkset[]>(() => readStoredRightPaneWorksets(getRightPaneWorksetsStorageKey(resolveOfficeWorkspaceKey()), RIGHT_PANE_WORKSET_LIMIT));
   const [quickAccessMode, setQuickAccessMode] = useState<QuickAccessMode>(() => readStoredQuickAccessMode(resolveOfficeWorkspaceKey()));
   const [quickAccessFavoritesExpanded, setQuickAccessFavoritesExpanded] = useState(false);
   const [quickAccessRecentExpanded, setQuickAccessRecentExpanded] = useState(false);
@@ -4766,6 +4818,17 @@ export function App(): JSX.Element {
   }, [commandPaletteFavorites, favoriteTargetsStorageKey]);
 
   useEffect(() => {
+    const nextWorksets = readStoredRightPaneWorksets(rightPaneWorksetsStorageKey, RIGHT_PANE_WORKSET_LIMIT);
+    setRightPaneWorksets((prev) => replaceStateIfChanged(prev, nextWorksets));
+  }, [rightPaneWorksetsStorageKey]);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(rightPaneWorksetsStorageKey, JSON.stringify(rightPaneWorksets.slice(0, RIGHT_PANE_WORKSET_LIMIT)));
+    } catch {}
+  }, [rightPaneWorksets, rightPaneWorksetsStorageKey]);
+
+  useEffect(() => {
     setQuickAccessMode(readStoredQuickAccessMode(officeWorkspaceKey));
     setQuickAccessFavoritesExpanded(false);
     setQuickAccessRecentExpanded(false);
@@ -5295,6 +5358,7 @@ export function App(): JSX.Element {
   const officeLayoutStorageKey = getOfficeLayoutStorageKey(officeWorkspaceKey);
   const recentTargetsStorageKey = getRecentTargetsStorageKey(officeWorkspaceKey);
   const favoriteTargetsStorageKey = getFavoriteTargetsStorageKey(officeWorkspaceKey);
+  const rightPaneWorksetsStorageKey = getRightPaneWorksetsStorageKey(officeWorkspaceKey);
 
   const filteredRuns = runs.filter((r) => r.run_id.includes(runFilter));
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
@@ -5447,6 +5511,15 @@ export function App(): JSX.Element {
     }
     return null;
   };
+  const buildRightPaneTabFromSavedTarget = (target: RightPaneSavedTarget | null): RightPaneTab | null => {
+    if (!target) return null;
+    if (target.kind === "character_sheet") return buildRightPaneCharacterTab(target.targetId);
+    if (target.kind === "thread") return buildRightPaneThreadTab(target.targetId);
+    if (target.kind === "tracker") return buildRightPaneTrackerTab(target.targetId);
+    if (target.kind === "run") return buildRightPaneRunTab(target.targetId);
+    return null;
+  };
+  const buildSavedRightPaneTarget = (tab: RightPaneTab): RightPaneSavedTarget => ({ kind: tab.kind, targetId: tab.targetId });
   const isRightPaneTabFavorited = (tab: RightPaneTab): boolean => {
     const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
     return favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
@@ -5601,14 +5674,38 @@ export function App(): JSX.Element {
   const clearClosedRightPaneTabs = (): void => {
     setClosedRightPaneTabs([]);
   };
+  const openRightPaneTabs = (tabs: RightPaneTab[]): void => {
+    if (!tabs.length) return;
+    tabs.forEach((tab) => registerRightPaneTab(tab));
+    const lastTab = tabs[tabs.length - 1] || null;
+    if (lastTab) syncRightPaneTab(lastTab);
+  };
   const supportedFavoriteRightPaneTabs = commandPaletteFavorites
     .map((item) => buildRightPaneTabFromStoredTarget(item))
     .filter((tab): tab is RightPaneTab => !!tab);
   const openSupportedFavoritesAsRightPaneTabs = (): void => {
-    if (!supportedFavoriteRightPaneTabs.length) return;
-    supportedFavoriteRightPaneTabs.forEach((tab) => registerRightPaneTab(tab));
-    const lastTab = supportedFavoriteRightPaneTabs[supportedFavoriteRightPaneTabs.length - 1] || null;
-    if (lastTab) syncRightPaneTab(lastTab);
+    openRightPaneTabs(supportedFavoriteRightPaneTabs);
+  };
+  const saveCurrentTabsAsWorkset = (): void => {
+    const targets = validRightPaneTabs.map((tab) => buildSavedRightPaneTarget(tab));
+    if (!targets.length) {
+      showToast("no tabs to save");
+      return;
+    }
+    const proposedName = `Workset ${rightPaneWorksets.length + 1}`;
+    const rawName = window.prompt("Save current tabs as workset", proposedName);
+    const name = String(rawName || "").trim();
+    if (!name) return;
+    setRightPaneWorksets((prev) => [{ id: `workset_${Date.now().toString(36)}`, name, targets }, ...prev].slice(0, RIGHT_PANE_WORKSET_LIMIT));
+    showToast("workset saved");
+  };
+  const openRightPaneWorksetAsTabs = (worksetId: string): void => {
+    const workset = rightPaneWorksets.find((item) => item.id === worksetId) || null;
+    if (!workset) return;
+    openRightPaneTabs(workset.targets.map((target) => buildRightPaneTabFromSavedTarget(target)).filter((tab): tab is RightPaneTab => !!tab));
+  };
+  const deleteRightPaneWorkset = (worksetId: string): void => {
+    setRightPaneWorksets((prev) => prev.filter((item) => item.id !== worksetId));
   };
   const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
     if (tab.kind === "character_sheet") {
@@ -5671,12 +5768,23 @@ export function App(): JSX.Element {
     const rows = reopenableClosedRightPaneTabs.map((tab) => ({
       id: `closed_tab_${tab.id}`,
       title: `Recently Closed: ${tab.label}`,
-      subtitle: tab.kind === "character_sheet" ? "Reopen character sheet" : "Reopen thread detail",
+      subtitle: tab.kind === "character_sheet" ? "Reopen character sheet" : (tab.kind === "tracker" ? "Reopen tracker detail" : (tab.kind === "run" ? "Reopen run detail" : "Reopen thread detail")),
       run: () => reopenClosedRightPaneTabById(tab.id),
     } as CommandPaletteItem));
     if (!q) return rows;
     return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
   }, [commandPaletteQuery, reopenableClosedRightPaneTabs]);
+  const commandPaletteWorksetItems = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    const rows = rightPaneWorksets.map((workset) => ({
+      id: `workset_${workset.id}`,
+      title: `Workset: ${workset.name}`,
+      subtitle: `Open ${workset.targets.length} saved right-pane tab${workset.targets.length === 1 ? "" : "s"}`,
+      run: () => openRightPaneWorksetAsTabs(workset.id),
+    } as CommandPaletteItem));
+    if (!q) return rows;
+    return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
+  }, [commandPaletteQuery, rightPaneWorksets]);
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -8463,6 +8571,17 @@ export function App(): JSX.Element {
                         <button type="button" className="inline-link" onClick={() => openSupportedFavoritesAsRightPaneTabs()}>Open Favorites as Tabs</button>
                       </div>
                     ) : null}
+                    {validRightPaneTabs.length ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => saveCurrentTabsAsWorkset()}>Save Current Tabs as Workset</button>
+                      </div>
+                    ) : null}
+                    {rightPaneWorksets.map((workset) => (
+                      <div key={workset.id} className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name}`}</button>
+                        <button type="button" className="inline-link" title="Delete workset" onClick={(e) => { e.stopPropagation(); deleteRightPaneWorkset(workset.id); }}>Delete</button>
+                      </div>
+                    ))}
                     {validRightPaneTabs.some((tab) => buildFavoriteItemFromRightPaneTab(tab) && !isRightPaneTabFavorited(tab)) ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => pinAllSupportedOpenTabs()}>Pin All Supported Open Tabs</button>
@@ -8900,9 +9019,15 @@ export function App(): JSX.Element {
                 {commandPaletteClosedTabItems.map((item) => renderCommandPaletteItem(item, "closed_tab_"))}
               </div>
             ) : null}
+            {commandPaletteWorksetItems.length ? (
+              <div className="list">
+                <div className="so-muted">Worksets</div>
+                {commandPaletteWorksetItems.map((item) => renderCommandPaletteItem(item, "workset_"))}
+              </div>
+            ) : null}
             <div className="list">
               {commandPaletteFiltered.map((item) => renderCommandPaletteItem(item))}
-              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteOpenTabItems.length && !commandPaletteClosedTabItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
+              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteOpenTabItems.length && !commandPaletteClosedTabItems.length && !commandPaletteWorksetItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
             </div>
           </div>
         </div>

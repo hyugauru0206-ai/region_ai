@@ -5070,7 +5070,6 @@ export function App(): JSX.Element {
         showToast("run_id missing");
         return;
       }
-      recordTrackerRecentTarget(row.runId, row.runId);
       jumpToRun(row.runId);
       return;
     }
@@ -7139,7 +7138,7 @@ export function App(): JSX.Element {
                   <div className="so-muted">Routines</div>
                   <div className="wrapAnywhere">{officeRoutinesLabel}</div>
                   <div className="composer-actions">
-                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => { const trackerRecentKey = String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(); recordTrackerRecentTarget(trackerRecentKey, activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined); openTrackerThread(controlRoomTrackerThreadKey); }}>Tracker</button> : null}
+                    {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? <button type="button" onClick={() => openTrackerThread(controlRoomTrackerThreadKey)}>Tracker</button> : null}
                     {isValidInboxThreadKey(controlRoomTrackerThreadKey) ? renderFavoriteToggleButton(buildTrackerTargetEntry(String(activeExecutionTracker?.runId || controlRoomTrackerThreadKey || "").trim(), activeExecutionTracker?.runId ? String(activeExecutionTracker.runId || "").trim() : undefined), "Pin tracker") : null}
                   </div>
                 </div>
@@ -7298,7 +7297,6 @@ export function App(): JSX.Element {
                               type="button"
                               title={`Open Tracker/Run: ${officeSeatTrackerRunId}`}
                               onClick={() => {
-                                recordTrackerRecentTarget(officeSeatTrackerRunId, officeSeatTrackerRunId);
                                 jumpToRun(officeSeatTrackerRunId);
                               }}
                             >
@@ -7413,7 +7411,7 @@ export function App(): JSX.Element {
                 <button type="button" onClick={() => openAgentMemory("facilitator", "episodes")}>Memory</button>
                 <button type="button" disabled={!isValidInboxThreadKey(councilThreadKey)} onClick={() => openCouncilThreadByKey()}>Thread</button>
                 {isValidInboxThreadKey(councilThreadKey) ? renderFavoriteToggleButton(buildThreadTargetEntry(councilThreadKey), "Pin thread") : null}
-                <button type="button" disabled={!officeRunId} onClick={() => { recordTrackerRecentTarget(officeRunId, officeRunId); jumpToRun(officeRunId); }}>Tracker/Run</button>
+                <button type="button" disabled={!officeRunId} onClick={() => jumpToRun(officeRunId)}>Tracker/Run</button>
                 {officeRunId ? renderFavoriteToggleButton(buildTrackerTargetEntry(officeRunId, officeRunId), "Pin tracker") : null}
               </div>
               <div className="composer-actions">

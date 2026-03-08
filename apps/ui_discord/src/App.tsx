@@ -5523,6 +5523,23 @@ export function App(): JSX.Element {
   const closeUnpinnedRightPaneTabs = (): void => {
     closeRightPaneTabsByIds(validRightPaneTabs.filter((tab) => !isRightPaneTabFavorited(tab)).map((tab) => tab.id), activeRightPaneTab && isRightPaneTabFavorited(activeRightPaneTab) ? activeRightPaneTab.id : "");
   };
+  const pinAllSupportedOpenTabs = (): void => {
+    const favoriteItems = validRightPaneTabs
+      .map((tab) => buildFavoriteItemFromRightPaneTab(tab))
+      .filter((item): item is CommandPaletteRecentItem => !!item);
+    if (!favoriteItems.length) return;
+    setCommandPaletteFavorites((prev) => {
+      const keep = prev.filter((row) => !favoriteItems.some((item) => item.id === row.id));
+      return [...favoriteItems, ...keep].slice(0, FAVORITE_TARGET_LIMIT);
+    });
+  };
+  const unpinAllSupportedOpenTabs = (): void => {
+    const favoriteIds = new Set(validRightPaneTabs
+      .map((tab) => buildFavoriteItemFromRightPaneTab(tab)?.id || "")
+      .filter((id) => !!id));
+    if (!favoriteIds.size) return;
+    setCommandPaletteFavorites((prev) => prev.filter((row) => !favoriteIds.has(row.id)));
+  };
   const reopenClosedRightPaneTabById = (tabId: string): void => {
     const reopenTab = reopenableClosedRightPaneTabs.find((tab) => tab.id === tabId) || null;
     if (!reopenTab) return;
@@ -8386,6 +8403,16 @@ export function App(): JSX.Element {
                     {activeRightPaneTab && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) >= 0 && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) < validRightPaneTabs.length - 1 ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => closeRightRightPaneTabs(activeRightPaneTab.id)}>Close Right</button>
+                      </div>
+                    ) : null}
+                    {validRightPaneTabs.some((tab) => buildFavoriteItemFromRightPaneTab(tab) && !isRightPaneTabFavorited(tab)) ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => pinAllSupportedOpenTabs()}>Pin All Supported Open Tabs</button>
+                      </div>
+                    ) : null}
+                    {validRightPaneTabs.some((tab) => buildFavoriteItemFromRightPaneTab(tab) && isRightPaneTabFavorited(tab)) ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => unpinAllSupportedOpenTabs()}>Unpin All Supported Open Tabs</button>
                       </div>
                     ) : null}
                     {validRightPaneTabs.some((tab) => !isRightPaneTabFavorited(tab)) ? (

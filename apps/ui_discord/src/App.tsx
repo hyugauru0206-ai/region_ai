@@ -52,7 +52,7 @@ type CommandPaletteRecentItem = {
 };
 
 type QuickAccessMode = "favorites" | "recent";
-type RightPaneTabKind = "character_sheet" | "thread" | "tracker";
+type RightPaneTabKind = "character_sheet" | "thread" | "tracker" | "run";
 type RightPaneTab = {
   id: string;
   kind: RightPaneTabKind;
@@ -4980,8 +4980,7 @@ export function App(): JSX.Element {
     const id = String(runId || "").trim();
     if (!id) return;
     recordRecentTargetEntry(buildRunTargetEntry(id));
-    setActiveChannel("runs");
-    setSelectedRunId(id);
+    activateRightPaneTab(buildRightPaneRunTab(id));
   }
 
   function jumpToDesign(designId: string): void {
@@ -5394,6 +5393,9 @@ export function App(): JSX.Element {
     if (tab.kind === "thread") {
       return buildThreadTargetEntry(tab.targetId);
     }
+    if (tab.kind === "run") {
+      return buildRunTargetEntry(tab.targetId);
+    }
     return null;
   };
   const buildRightPaneTrackerTab = (trackerIdInput?: string): RightPaneTab | null => {
@@ -5410,6 +5412,17 @@ export function App(): JSX.Element {
       title: runId ? `Tracker: ${trackerId} | run ${runId}` : `Tracker: ${trackerId}`,
     };
   };
+  const buildRightPaneRunTab = (runIdInput?: string): RightPaneTab | null => {
+    const runId = String(runIdInput || selectedRunId || "").trim();
+    if (!runId) return null;
+    return {
+      id: `right_pane_run_${runId}`,
+      kind: "run",
+      targetId: runId,
+      label: `Run ${formatCompactTargetId("run", runId)}`,
+      title: `Run: ${runId}`,
+    };
+  };
   const isRightPaneTabFavorited = (tab: RightPaneTab): boolean => {
     const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
     return favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
@@ -5417,6 +5430,7 @@ export function App(): JSX.Element {
   const getRightPaneTabTypeLabel = (tab: RightPaneTab): string => {
     if (tab.kind === "character_sheet") return "CHAR";
     if (tab.kind === "tracker") return "TRACKER";
+    if (tab.kind === "run") return "RUN";
     return "THREAD";
   };
   const syncRightPaneTab = (tab: RightPaneTab): void => {
@@ -5426,6 +5440,12 @@ export function App(): JSX.Element {
       return;
     }
     if (tab.kind === "tracker") {
+      return;
+    }
+    if (tab.kind === "run") {
+      setActiveChannel("runs");
+      setSelectedRunDetail(null);
+      setSelectedRunId(tab.targetId);
       return;
     }
     setInboxThreadViewItems([]);
@@ -5564,11 +5584,16 @@ export function App(): JSX.Element {
     if (tab.kind === "tracker") {
       return String(activeExecutionTracker?.id || "").trim() === tab.targetId;
     }
+    if (tab.kind === "run") {
+      return !!String(tab.targetId || "").trim();
+    }
     return isValidInboxThreadKey(tab.targetId);
   }), [activeExecutionTracker?.id, orgAgents, rightPaneTabs]);
   const activeRightPaneTab = validRightPaneTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
   const activeRightPaneThreadKey = activeRightPaneTab?.kind === "thread" ? activeRightPaneTab.targetId : "";
   const activeRightPaneTracker = activeRightPaneTab?.kind === "tracker" && String(activeExecutionTracker?.id || "").trim() === activeRightPaneTab.targetId ? activeExecutionTracker : null;
+  const selectedRunDetailId = String(selectedRunDetail?.result?.run_id || selectedRunDetail?.run_id || "").trim();
+  const activeRightPaneRunDetail = activeRightPaneTab?.kind === "run" && selectedRunDetailId === activeRightPaneTab.targetId ? selectedRunDetail : null;
   const visibleRightPaneTabs = useMemo(() => {
     if (validRightPaneTabs.length <= RIGHT_PANE_VISIBLE_TAB_LIMIT) return validRightPaneTabs;
     const preferred = validRightPaneTabs.slice(-RIGHT_PANE_VISIBLE_TAB_LIMIT);
@@ -5582,17 +5607,26 @@ export function App(): JSX.Element {
       if (tab.kind === "character_sheet") return buildRightPaneCharacterTab(tab.targetId);
       if (tab.kind === "thread") return buildRightPaneThreadTab(tab.targetId);
       if (tab.kind === "tracker") return buildRightPaneTrackerTab(tab.targetId);
+      if (tab.kind === "run") return buildRightPaneRunTab(tab.targetId);
       return null;
     })
-    .filter((tab): tab is RightPaneTab => !!tab), [activeExecutionTracker?.id, activeExecutionTracker?.runId, closedRightPaneTabs, orgAgents]);
+    .filter((tab): tab is RightPaneTab => !!tab), [activeExecutionTracker?.id, activeExecutionTracker?.runId, closedRightPaneTabs, orgAgents, selectedRunId]);
   const commandPaletteOpenTabItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const rows = validRightPaneTabs.map((tab) => {
       const isActive = tab.id === activeRightPaneTabId;
       return {
-        id: tab.kind === "character_sheet" ? `agent_${tab.targetId}` : (tab.kind === "tracker" ? `tracker_tab_${tab.targetId}` : `thread_${tab.targetId}`),
+        id: tab.kind === "character_sheet"
+          ? `agent_${tab.targetId}`
+          : (tab.kind === "tracker"
+            ? `tracker_tab_${tab.targetId}`
+            : (tab.kind === "run" ? `run_tab_${tab.targetId}` : `thread_${tab.targetId}`)),
         title: `Open Tab: ${tab.label}${isActive ? " (active)" : ""}`,
-        subtitle: tab.kind === "character_sheet" ? "Focus open character sheet" : (tab.kind === "tracker" ? "Focus open tracker detail" : "Focus open thread detail"),
+        subtitle: tab.kind === "character_sheet"
+          ? "Focus open character sheet"
+          : (tab.kind === "tracker"
+            ? "Focus open tracker detail"
+            : (tab.kind === "run" ? "Focus open run detail" : "Focus open thread detail")),
         run: () => switchRightPaneTab(tab.id),
       } as CommandPaletteItem;
     });
@@ -6229,7 +6263,7 @@ export function App(): JSX.Element {
               <div className="row-head"><strong>Runs</strong><input placeholder="filter run_id" value={runFilter} onChange={(e) => setRunFilter(e.target.value)} /></div>
               <div className="list">
                 {filteredRuns.map((r) => (
-                  <button key={r.run_id} className={`list-item ${selectedRunId === r.run_id ? "active" : ""}`} onClick={() => setSelectedRunId(r.run_id)} type="button">
+                  <button key={r.run_id} className={`list-item ${selectedRunId === r.run_id ? "active" : ""}`} onClick={() => jumpToRun(r.run_id)} type="button">
                     <div>{r.run_id}</div><small>{formatTs(r.updated_at)}</small>
                   </button>
                 ))}
@@ -8434,7 +8468,7 @@ export function App(): JSX.Element {
         <section className="character-sheet-panel raPanel so-panel">
           <div className="so-header">
             <div>
-              <strong>{activeRightPaneTab?.kind === "thread" ? "Thread" : (activeRightPaneTab?.kind === "tracker" ? "Tracker" : "Character Sheet")}</strong>
+              <strong>{activeRightPaneTab?.kind === "thread" ? "Thread" : (activeRightPaneTab?.kind === "tracker" ? "Tracker" : (activeRightPaneTab?.kind === "run" ? "Run" : "Character Sheet"))}</strong>
               <div className="so-muted">Right pane / session detail</div>
             </div>
             <div className="composer-actions">
@@ -8460,6 +8494,11 @@ export function App(): JSX.Element {
                 <>
                   <button type="button" title="Refresh tracker" disabled={activeRightPaneTracker.status !== "polling" || executionTrackerPollInflightRef.current} onClick={() => void refreshExecutionTrackerNow()}>Refresh</button>
                   <button type="button" title="Close tracker" onClick={() => closeRightPaneTab(activeRightPaneTab.id)}>Close</button>
+                </>
+              ) : null}
+              {activeRightPaneTab?.kind === "run" ? (
+                <>
+                  <button type="button" title="Close run" onClick={() => closeRightPaneTab(activeRightPaneTab.id)}>Close</button>
                 </>
               ) : null}
             </div>
@@ -8617,8 +8656,36 @@ export function App(): JSX.Element {
                 {activeRightPaneTracker.lastPayload ? <pre className="jsonOutput">{JSON.stringify(activeRightPaneTracker.lastPayload, null, 2)}</pre> : <div className="empty">No tracker payload yet</div>}
               </div>
             </div>
+          ) : activeRightPaneTab?.kind === "run" ? (
+            <div className="character-sheet-body">
+              <div className="character-sheet-card so-card">
+                <div className="row-head">
+                  <strong>{activeRightPaneTab.label}</strong>
+                  <span className="workspace-status-badge status-idle">run</span>
+                </div>
+                <div className="raKvRow"><span className="raKvKey">run_id</span><code className="raKvVal raMonoBox raWrapAnywhere">{activeRightPaneTab.targetId}</code></div>
+                {activeRightPaneRunDetail ? (
+                  <>
+                    <pre className="jsonOutput">{JSON.stringify(activeRightPaneRunDetail.result, null, 2)}</pre>
+                    {Array.isArray(activeRightPaneRunDetail?.artifacts?.files) && activeRightPaneRunDetail.artifacts.files.length ? (
+                      <>
+                        <div className="row-head"><strong>Artifacts</strong></div>
+                        <div className="list">
+                          {activeRightPaneRunDetail.artifacts.files.map((p: string) => (
+                            <div key={p} className="artifact-row">
+                              <button type="button" onClick={() => void loadArtifact(activeRightPaneTab.targetId, p)}>{p}</button>
+                              {p.endsWith(".zip") ? <button type="button" onClick={() => void loadZipEntries(activeRightPaneTab.targetId, p)}>entries</button> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    ) : null}
+                  </>
+                ) : <div className="empty">Loading or unavailable run detail</div>}
+              </div>
+            </div>
           ) : (
-            <div className="empty">Open a character, thread, or tracker to keep it handy in the right pane.</div>
+            <div className="empty">Open a character, thread, tracker, or run to keep it handy in the right pane.</div>
           )}
         </section>
         {activeChannel === "inbox" && (

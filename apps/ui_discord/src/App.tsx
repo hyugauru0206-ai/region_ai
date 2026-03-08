@@ -5380,6 +5380,10 @@ export function App(): JSX.Element {
     }
     return null;
   };
+  const isRightPaneTabFavorited = (tab: RightPaneTab): boolean => {
+    const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
+    return favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
+  };
   const getRightPaneTabTypeLabel = (tab: RightPaneTab): string => (tab.kind === "character_sheet" ? "CHAR" : "THREAD");
   const syncRightPaneTab = (tab: RightPaneTab): void => {
     if (tab.kind === "character_sheet") {
@@ -5468,6 +5472,9 @@ export function App(): JSX.Element {
   };
   const closeAllRightPaneTabs = (): void => {
     closeRightPaneTabsByIds(validRightPaneTabs.map((tab) => tab.id));
+  };
+  const closeUnpinnedRightPaneTabs = (): void => {
+    closeRightPaneTabsByIds(validRightPaneTabs.filter((tab) => !isRightPaneTabFavorited(tab)).map((tab) => tab.id), activeRightPaneTab && isRightPaneTabFavorited(activeRightPaneTab) ? activeRightPaneTab.id : "");
   };
   const reopenClosedRightPaneTabById = (tabId: string): void => {
     const reopenTab = reopenableClosedRightPaneTabs.find((tab) => tab.id === tabId) || null;
@@ -8310,6 +8317,11 @@ export function App(): JSX.Element {
                     {activeRightPaneTab && validRightPaneTabs.length > 1 ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => closeOtherRightPaneTabs(activeRightPaneTab.id)}>Close Others</button>
+                      </div>
+                    ) : null}
+                    {validRightPaneTabs.some((tab) => !isRightPaneTabFavorited(tab)) ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => closeUnpinnedRightPaneTabs()}>Close Unpinned Tabs</button>
                       </div>
                     ) : null}
                     {validRightPaneTabs.length ? (

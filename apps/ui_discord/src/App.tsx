@@ -962,6 +962,7 @@ const FAVORITE_TARGET_LIMIT = 6;
 const QUICK_ACCESS_VISIBLE_LIMIT = 3;
 const RIGHT_PANE_TAB_LIMIT = 5;
 const CLOSED_RIGHT_PANE_TAB_LIMIT = 8;
+const RIGHT_PANE_VISIBLE_TAB_LIMIT = 3;
 const CHANNELS: Array<{ id: ChannelId; label: string }> = [
   { id: "general", label: "general" },
   { id: "codex", label: "codex" },
@@ -5480,6 +5481,14 @@ export function App(): JSX.Element {
   }), [orgAgents, rightPaneTabs]);
   const activeRightPaneTab = validRightPaneTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
   const activeRightPaneThreadKey = activeRightPaneTab?.kind === "thread" ? activeRightPaneTab.targetId : "";
+  const visibleRightPaneTabs = useMemo(() => {
+    if (validRightPaneTabs.length <= RIGHT_PANE_VISIBLE_TAB_LIMIT) return validRightPaneTabs;
+    const preferred = validRightPaneTabs.slice(-RIGHT_PANE_VISIBLE_TAB_LIMIT);
+    if (!activeRightPaneTab || preferred.some((tab) => tab.id === activeRightPaneTab.id)) return preferred;
+    return [...preferred.slice(1), activeRightPaneTab];
+  }, [activeRightPaneTab, validRightPaneTabs]);
+  const visibleRightPaneTabIds = useMemo(() => new Set(visibleRightPaneTabs.map((tab) => tab.id)), [visibleRightPaneTabs]);
+  const overflowRightPaneTabs = useMemo(() => validRightPaneTabs.filter((tab) => !visibleRightPaneTabIds.has(tab.id)), [validRightPaneTabs, visibleRightPaneTabIds]);
   const commandPaletteOpenTabItems = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
     const rows = validRightPaneTabs.map((tab) => {
@@ -8212,8 +8221,8 @@ export function App(): JSX.Element {
               <strong>Session Tabs</strong>
               <small>{validRightPaneTabs.length}/{RIGHT_PANE_TAB_LIMIT}</small>
             </div>
-            <div className="composer-actions">
-              {validRightPaneTabs.map((tab) => {
+            <div className="composer-actions right-pane-tab-strip">
+              {visibleRightPaneTabs.map((tab) => {
                 const isActive = activeRightPaneTab?.id === tab.id;
                 const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
                 const isFavorite = favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
@@ -8236,6 +8245,22 @@ export function App(): JSX.Element {
                   </span>
                 );
               })}
+              {overflowRightPaneTabs.length ? (
+                <details className="right-pane-tab-overflow" onClick={(e) => e.stopPropagation()}>
+                  <summary title={`Open ${overflowRightPaneTabs.length} more tabs`}>+{overflowRightPaneTabs.length}</summary>
+                  <div className="right-pane-tab-overflow-menu so-panel">
+                    {overflowRightPaneTabs.map((tab) => {
+                      const isActive = activeRightPaneTab?.id === tab.id;
+                      return (
+                        <div key={tab.id} className="right-pane-tab-overflow-row" title={tab.title}>
+                          <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}{isActive ? " (active)" : ""}</button>
+                          <button type="button" className="inline-link" title="Close tab" onClick={(e) => { e.stopPropagation(); closeRightPaneTab(tab.id); }}>x</button>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </details>
+              ) : null}
             </div>
           </section>
         ) : null}

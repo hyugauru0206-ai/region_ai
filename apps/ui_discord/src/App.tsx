@@ -5470,6 +5470,16 @@ export function App(): JSX.Element {
     if (!keepTab) return;
     closeRightPaneTabsByIds(validRightPaneTabs.filter((tab) => tab.id !== tabId).map((tab) => tab.id), keepTab.id);
   };
+  const closeLeftRightPaneTabs = (tabId: string): void => {
+    const activeIndex = validRightPaneTabs.findIndex((tab) => tab.id === tabId);
+    if (activeIndex <= 0) return;
+    closeRightPaneTabsByIds(validRightPaneTabs.slice(0, activeIndex).map((tab) => tab.id), tabId);
+  };
+  const closeRightRightPaneTabs = (tabId: string): void => {
+    const activeIndex = validRightPaneTabs.findIndex((tab) => tab.id === tabId);
+    if (activeIndex < 0 || activeIndex >= validRightPaneTabs.length - 1) return;
+    closeRightPaneTabsByIds(validRightPaneTabs.slice(activeIndex + 1).map((tab) => tab.id), tabId);
+  };
   const closeAllRightPaneTabs = (): void => {
     closeRightPaneTabsByIds(validRightPaneTabs.map((tab) => tab.id));
   };
@@ -8323,6 +8333,16 @@ export function App(): JSX.Element {
                     {activeRightPaneTab && validRightPaneTabs.length > 1 ? (
                       <div className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => closeOtherRightPaneTabs(activeRightPaneTab.id)}>Close Others</button>
+                      </div>
+                    ) : null}
+                    {activeRightPaneTab && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) > 0 ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => closeLeftRightPaneTabs(activeRightPaneTab.id)}>Close Left</button>
+                      </div>
+                    ) : null}
+                    {activeRightPaneTab && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) >= 0 && validRightPaneTabs.findIndex((tab) => tab.id === activeRightPaneTab.id) < validRightPaneTabs.length - 1 ? (
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => closeRightRightPaneTabs(activeRightPaneTab.id)}>Close Right</button>
                       </div>
                     ) : null}
                     {validRightPaneTabs.some((tab) => !isRightPaneTabFavorited(tab)) ? (

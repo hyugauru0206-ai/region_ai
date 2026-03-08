@@ -5519,6 +5519,17 @@ export function App(): JSX.Element {
     if (!q) return rows;
     return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
   }, [activeRightPaneTabId, commandPaletteQuery, validRightPaneTabs]);
+  const commandPaletteClosedTabItems = useMemo(() => {
+    const q = commandPaletteQuery.trim().toLowerCase();
+    const rows = reopenableClosedRightPaneTabs.map((tab) => ({
+      id: `closed_tab_${tab.id}`,
+      title: `Recently Closed: ${tab.label}`,
+      subtitle: tab.kind === "character_sheet" ? "Reopen character sheet" : "Reopen thread detail",
+      run: () => reopenClosedRightPaneTabById(tab.id),
+    } as CommandPaletteItem));
+    if (!q) return rows;
+    return rows.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
+  }, [commandPaletteQuery, reopenableClosedRightPaneTabs]);
   const commandPaletteItems = useMemo(() => {
     const rows: CommandPaletteItem[] = [];
     const seen = new Set<string>();
@@ -5800,11 +5811,11 @@ export function App(): JSX.Element {
   }, [commandPaletteItems, commandPaletteQuery, commandPaletteRecent, favoriteTargetIds]);
   const commandPaletteFiltered = useMemo(() => {
     const q = commandPaletteQuery.trim().toLowerCase();
-    const hiddenIds = new Set([...commandPaletteFavoriteItems.map((item) => item.id), ...commandPaletteRecentItems.map((item) => item.id), ...commandPaletteOpenTabItems.map((item) => item.id)]);
+    const hiddenIds = new Set([...commandPaletteFavoriteItems.map((item) => item.id), ...commandPaletteRecentItems.map((item) => item.id), ...commandPaletteOpenTabItems.map((item) => item.id), ...commandPaletteClosedTabItems.map((item) => item.id)]);
     const visibleItems = commandPaletteItems.filter((item) => !hiddenIds.has(item.id));
     if (!q) return visibleItems;
     return visibleItems.filter((item) => `${item.title} ${item.subtitle}`.toLowerCase().includes(q));
-  }, [commandPaletteFavoriteItems, commandPaletteItems, commandPaletteOpenTabItems, commandPaletteQuery, commandPaletteRecentItems]);
+  }, [commandPaletteClosedTabItems, commandPaletteFavoriteItems, commandPaletteItems, commandPaletteOpenTabItems, commandPaletteQuery, commandPaletteRecentItems]);
   const renderCommandPaletteItem = (item: CommandPaletteItem, keyPrefix = "", slotLabel = ""): JSX.Element => {
     const isFavorite = favoriteTargetIds.has(item.id);
     return (
@@ -8646,9 +8657,15 @@ export function App(): JSX.Element {
                 {commandPaletteOpenTabItems.map((item) => renderCommandPaletteItem(item, "open_tab_"))}
               </div>
             ) : null}
+            {commandPaletteClosedTabItems.length ? (
+              <div className="list">
+                <div className="so-muted">Recently Closed</div>
+                {commandPaletteClosedTabItems.map((item) => renderCommandPaletteItem(item, "closed_tab_"))}
+              </div>
+            ) : null}
             <div className="list">
               {commandPaletteFiltered.map((item) => renderCommandPaletteItem(item))}
-              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteOpenTabItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
+              {!commandPaletteFavoriteItems.length && !commandPaletteRecentItems.length && !commandPaletteOpenTabItems.length && !commandPaletteClosedTabItems.length && !commandPaletteFiltered.length ? <div className="empty">No command matched</div> : null}
             </div>
           </div>
         </div>

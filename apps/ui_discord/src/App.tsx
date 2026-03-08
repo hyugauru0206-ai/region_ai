@@ -5380,6 +5380,7 @@ export function App(): JSX.Element {
     }
     return null;
   };
+  const getRightPaneTabTypeLabel = (tab: RightPaneTab): string => (tab.kind === "character_sheet" ? "CHAR" : "THREAD");
   const syncRightPaneTab = (tab: RightPaneTab): void => {
     if (tab.kind === "character_sheet") {
       setCharacterSheetAgentId(tab.targetId);
@@ -8253,7 +8254,10 @@ export function App(): JSX.Element {
                     <div className="right-pane-tab-overflow-menu so-panel">
                       {reopenableClosedRightPaneTabs.map((tab) => (
                         <div key={tab.id} className="right-pane-tab-overflow-row" title={tab.title}>
-                          <button type="button" onClick={() => reopenClosedRightPaneTabById(tab.id)}>{tab.label}</button>
+                          <div className="right-pane-tab-chip">
+                            <span className="right-pane-tab-type">{getRightPaneTabTypeLabel(tab)}</span>
+                            <button type="button" onClick={() => reopenClosedRightPaneTabById(tab.id)}>{tab.label}</button>
+                          </div>
                         </div>
                       ))}
                     </div>
@@ -8268,7 +8272,8 @@ export function App(): JSX.Element {
                 const favoriteItem = buildFavoriteItemFromRightPaneTab(tab);
                 const isFavorite = favoriteItem ? isFavoriteTarget(favoriteItem.id) : false;
                 return (
-                  <span key={tab.id} title={tab.title}>
+                  <span key={tab.id} title={tab.title} className="right-pane-tab-chip">
+                    <span className="right-pane-tab-type">{getRightPaneTabTypeLabel(tab)}</span>
                     <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}</button>
                     {favoriteItem ? (
                       <button
@@ -8294,7 +8299,10 @@ export function App(): JSX.Element {
                       const isActive = activeRightPaneTab?.id === tab.id;
                       return (
                         <div key={tab.id} className="right-pane-tab-overflow-row" title={tab.title}>
-                          <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}{isActive ? " (active)" : ""}</button>
+                          <div className="right-pane-tab-chip">
+                            <span className="right-pane-tab-type">{getRightPaneTabTypeLabel(tab)}</span>
+                            <button type="button" className={isActive ? "inline-link" : undefined} aria-pressed={isActive} onClick={() => switchRightPaneTab(tab.id)}>{tab.label}{isActive ? " (active)" : ""}</button>
+                          </div>
                           <button type="button" className="inline-link" title="Close tab" onClick={(e) => { e.stopPropagation(); closeRightPaneTab(tab.id); }}>x</button>
                         </div>
                       );

@@ -442,6 +442,22 @@ button:hover {
   gap: 8px;
 }
 
+.right-pane-tab-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.right-pane-tab-type {
+  font-size: 10px;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 1px 5px;
+  background: rgba(255, 255, 255, 0.03);
+}
+
 .grid2 {
   display: grid;
   grid-template-columns: 320px 1fr;

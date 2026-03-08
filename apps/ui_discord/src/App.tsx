@@ -5699,10 +5699,24 @@ export function App(): JSX.Element {
     setRightPaneWorksets((prev) => [{ id: `workset_${Date.now().toString(36)}`, name, targets }, ...prev].slice(0, RIGHT_PANE_WORKSET_LIMIT));
     showToast("workset saved");
   };
-  const openRightPaneWorksetAsTabs = (worksetId: string): void => {
+  const openRightPaneWorksetAsTabs = (worksetId: string, replaceExisting = false): void => {
     const workset = rightPaneWorksets.find((item) => item.id === worksetId) || null;
     if (!workset) return;
-    openRightPaneTabs(workset.targets.map((target) => buildRightPaneTabFromSavedTarget(target)).filter((tab): tab is RightPaneTab => !!tab));
+    const tabs = workset.targets.map((target) => buildRightPaneTabFromSavedTarget(target)).filter((tab): tab is RightPaneTab => !!tab);
+    if (!tabs.length) return;
+    if (replaceExisting && validRightPaneTabs.length) {
+      closeRightPaneTabsByIds(validRightPaneTabs.map((tab) => tab.id));
+    }
+    openRightPaneTabs(tabs);
+  };
+  const updateRightPaneWorksetFromCurrentTabs = (worksetId: string): void => {
+    const targets = validRightPaneTabs.map((tab) => buildSavedRightPaneTarget(tab));
+    if (!targets.length) {
+      showToast("no tabs to save");
+      return;
+    }
+    setRightPaneWorksets((prev) => prev.map((item) => item.id === worksetId ? { ...item, targets } : item));
+    showToast("workset updated");
   };
   const deleteRightPaneWorkset = (worksetId: string): void => {
     setRightPaneWorksets((prev) => prev.filter((item) => item.id !== worksetId));
@@ -8579,6 +8593,8 @@ export function App(): JSX.Element {
                     {rightPaneWorksets.map((workset) => (
                       <div key={workset.id} className="right-pane-tab-overflow-row">
                         <button type="button" className="inline-link" onClick={() => openRightPaneWorksetAsTabs(workset.id)}>{`Open Workset: ${workset.name}`}</button>
+                        <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); openRightPaneWorksetAsTabs(workset.id, true); }}>Replace</button>
+                        {validRightPaneTabs.length ? <button type="button" className="inline-link" onClick={(e) => { e.stopPropagation(); updateRightPaneWorksetFromCurrentTabs(workset.id); }}>Update</button> : null}
                         <button type="button" className="inline-link" title="Delete workset" onClick={(e) => { e.stopPropagation(); deleteRightPaneWorkset(workset.id); }}>Delete</button>
                       </div>
                     ))}

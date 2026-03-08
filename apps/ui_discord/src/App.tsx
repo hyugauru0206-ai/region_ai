@@ -5490,6 +5490,9 @@ export function App(): JSX.Element {
     }
     reopenClosedRightPaneTabById(reopenTab.id);
   };
+  const clearClosedRightPaneTabs = (): void => {
+    setClosedRightPaneTabs([]);
+  };
   const validRightPaneTabs = useMemo(() => rightPaneTabs.filter((tab) => {
     if (tab.kind === "character_sheet") {
       return orgAgents.some((agent) => String(agent.id || "").trim() === tab.targetId);
@@ -8267,6 +8270,9 @@ export function App(): JSX.Element {
                           </div>
                         </div>
                       ))}
+                      <div className="right-pane-tab-overflow-row">
+                        <button type="button" className="inline-link" onClick={() => clearClosedRightPaneTabs()}>Clear Recently Closed</button>
+                      </div>
                     </div>
                   </details>
                 ) : null}

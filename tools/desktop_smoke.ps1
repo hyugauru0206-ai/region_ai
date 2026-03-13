@@ -78,6 +78,54 @@ function Test-ContainsAllMarkers {
   return $true
 }
 
+function Invoke-DesktopStaticFallback {
+  param(
+    [Parameter(Mandatory = $true)]$Result,
+    [Parameter(Mandatory = $true)][string]$DesktopDir,
+    [Parameter(Mandatory = $true)][string]$WorkspaceRoot,
+    [Parameter(Mandatory = $true)][string]$RepoRoot
+  )
+
+  & node --check (Join-Path $DesktopDir "main.cjs")
+  if ($LASTEXITCODE -ne 0) { throw "desktop_main_syntax_failed" }
+  & node --check (Join-Path $DesktopDir "preload.cjs")
+  if ($LASTEXITCODE -ne 0) { throw "desktop_preload_syntax_failed" }
+
+  $regionUiStatic = Get-RegionUiStaticContent -WorkspaceRoot $WorkspaceRoot -RepoRoot $RepoRoot
+  if ([string]::IsNullOrWhiteSpace([string]$regionUiStatic.text)) {
+    throw "desktop_region_ui_static_missing"
+  }
+
+  $Result.quick_access_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+    "Control Room",
+    "Quick Access",
+    "Office Canvas",
+    "Favorites",
+    "Recent",
+    "Collapse"
+  )
+  $Result.command_palette_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+    "Command Palette",
+    "Ctrl+K",
+    "View: Office",
+    "View: Debate",
+    "View: Dashboard"
+  )
+  $Result.office_debate_nav_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
+    "Open control room office view",
+    "Open discussion stage view",
+    "Debate Stage"
+  )
+
+  if (-not $Result.quick_access_ok) { throw ("desktop_region_ui_quick_access_static_failed:" + [string]$regionUiStatic.source) }
+  if (-not $Result.command_palette_ok) { throw ("desktop_region_ui_command_palette_static_failed:" + [string]$regionUiStatic.source) }
+  if (-not $Result.office_debate_nav_ok) { throw ("desktop_region_ui_navigation_static_failed:" + [string]$regionUiStatic.source) }
+
+  $Result.mode = "local_static_fallback"
+  $Result.desktop_passed = $true
+  $Result.exit_code = 0
+}
+
 try {
   if ($env:REGION_AI_SKIP_DESKTOP -eq "1") {
     $result.skipped = $true
@@ -107,8 +155,12 @@ try {
     Push-Location $desktopDir
     try {
       $fallbackUsed = $false
+      $preferStaticFallback = ($env:REGION_AI_SMOKE_OFFLINE -eq "1" -and $env:REGION_AI_DESKTOP_SMOKE_FORCE_RUNTIME -ne "1")
       $hasElectron = Test-Path -LiteralPath (Join-Path $desktopDir "node_modules\\electron")
-      if (-not $hasElectron) {
+      if ($preferStaticFallback) {
+        Invoke-DesktopStaticFallback -Result $result -DesktopDir $desktopDir -WorkspaceRoot $WorkspaceRoot -RepoRoot $repoRoot
+        $fallbackUsed = $true
+      } elseif (-not $hasElectron) {
         $prevEa = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
         $ciOut = @(& $env:ComSpec /d /s /c "npm.cmd ci --no-audit --no-fund --prefer-offline" 2>&1)
@@ -118,41 +170,7 @@ try {
           if (-not $Json) {
             foreach ($line in $ciOut) { Write-Output ([string]$line) }
           }
-          # fallback: local static validation when electron dependency is unavailable in offline env
-          & node --check (Join-Path $desktopDir "main.cjs")
-          if ($LASTEXITCODE -ne 0) { throw "desktop_main_syntax_failed" }
-          & node --check (Join-Path $desktopDir "preload.cjs")
-          if ($LASTEXITCODE -ne 0) { throw "desktop_preload_syntax_failed" }
-          $regionUiStatic = Get-RegionUiStaticContent -WorkspaceRoot $WorkspaceRoot -RepoRoot $repoRoot
-          if ([string]::IsNullOrWhiteSpace([string]$regionUiStatic.text)) {
-            throw "desktop_region_ui_static_missing"
-          }
-          $result.quick_access_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
-            "Control Room",
-            "Quick Access",
-            "Office Canvas",
-            "Favorites",
-            "Recent",
-            "Collapse"
-          )
-          $result.command_palette_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
-            "Command Palette",
-            "Ctrl+K",
-            "View: Office",
-            "View: Debate",
-            "View: Dashboard"
-          )
-          $result.office_debate_nav_ok = Test-ContainsAllMarkers -Text ([string]$regionUiStatic.text) -Markers @(
-            "Open control room office view",
-            "Open discussion stage view",
-            "Debate Stage"
-          )
-          if (-not $result.quick_access_ok) { throw ("desktop_region_ui_quick_access_static_failed:" + [string]$regionUiStatic.source) }
-          if (-not $result.command_palette_ok) { throw ("desktop_region_ui_command_palette_static_failed:" + [string]$regionUiStatic.source) }
-          if (-not $result.office_debate_nav_ok) { throw ("desktop_region_ui_navigation_static_failed:" + [string]$regionUiStatic.source) }
-          $result.mode = "local_static_fallback"
-          $result.desktop_passed = $true
-          $result.exit_code = 0
+          Invoke-DesktopStaticFallback -Result $result -DesktopDir $desktopDir -WorkspaceRoot $WorkspaceRoot -RepoRoot $repoRoot
           $fallbackUsed = $true
         }
       }

@@ -419,6 +419,11 @@
   - `cd apps/ui_desktop_electron && npm.cmd run desktop:dev`
 - Build:
   - `cd apps/ui_desktop_electron && npm.cmd run desktop:build`
+- Windows packaged app (unpacked):
+  - from repo root: `npm.cmd run desktop:dist:win`
+  - output: `artifacts/release/ui_desktop_electron/win-unpacked/`
+  - launch: `artifacts/release/ui_desktop_electron/win-unpacked/Region AI Desktop.exe`
+  - scope: bundles the built desktop UI and bundled UI API; installer and portable single-exe packaging are intentionally deferred for now
 - Smoke:
   - `powershell -NoProfile -ExecutionPolicy Bypass -File tools/desktop_smoke.ps1 -Json`
   - set `REGION_AI_SKIP_DESKTOP=1` to skip when GUI/deps are not available

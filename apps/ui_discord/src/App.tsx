@@ -4486,9 +4486,21 @@ export function App(): JSX.Element {
   }, [characterSheetAgentId]);
 
   useEffect(() => {
-    if (validRightPaneTabs.length === rightPaneTabs.length) {
-      if (activeRightPaneTabId && !validRightPaneTabs.some((tab) => tab.id === activeRightPaneTabId)) {
-        const fallbackTab = validRightPaneTabs[validRightPaneTabs.length - 1] || null;
+    const filteredTabs = rightPaneTabs.filter((tab) => {
+      if (tab.kind === "character_sheet") {
+        return orgAgents.some((agent) => String(agent.id || "").trim() === tab.targetId);
+      }
+      if (tab.kind === "tracker") {
+        return String(activeExecutionTracker?.id || "").trim() === tab.targetId;
+      }
+      if (tab.kind === "run") {
+        return !!String(tab.targetId || "").trim();
+      }
+      return isValidInboxThreadKey(tab.targetId);
+    });
+    if (filteredTabs.length === rightPaneTabs.length) {
+      if (activeRightPaneTabId && !filteredTabs.some((tab) => tab.id === activeRightPaneTabId)) {
+        const fallbackTab = filteredTabs[filteredTabs.length - 1] || null;
         setActiveRightPaneTabId(fallbackTab?.id || "");
         if (fallbackTab) {
           syncRightPaneTab(fallbackTab);
@@ -4498,16 +4510,16 @@ export function App(): JSX.Element {
       }
       return;
     }
-    setRightPaneTabs(validRightPaneTabs);
-    if (!activeRightPaneTabId || validRightPaneTabs.some((tab) => tab.id === activeRightPaneTabId)) return;
-    const fallbackTab = validRightPaneTabs[validRightPaneTabs.length - 1] || null;
+    setRightPaneTabs(filteredTabs);
+    if (!activeRightPaneTabId || filteredTabs.some((tab) => tab.id === activeRightPaneTabId)) return;
+    const fallbackTab = filteredTabs[filteredTabs.length - 1] || null;
     setActiveRightPaneTabId(fallbackTab?.id || "");
     if (fallbackTab) {
       syncRightPaneTab(fallbackTab);
       return;
     }
     closeRightPaneThreadDetail();
-  }, [activeRightPaneTabId, rightPaneTabs, validRightPaneTabs]);
+  }, [activeExecutionTracker?.id, activeRightPaneTabId, orgAgents, rightPaneTabs]);
 
   useEffect(() => {
     if (!(activeChannel === "activity" || activeChannel === "workspace")) return;
@@ -4795,6 +4807,12 @@ export function App(): JSX.Element {
     document.documentElement.setAttribute("data-ui-effects", uiEffects);
   }, [uiEffects]);
 
+  const officeWorkspaceKey = resolveOfficeWorkspaceKey();
+  const officeLayoutStorageKey = getOfficeLayoutStorageKey(officeWorkspaceKey);
+  const recentTargetsStorageKey = getRecentTargetsStorageKey(officeWorkspaceKey);
+  const favoriteTargetsStorageKey = getFavoriteTargetsStorageKey(officeWorkspaceKey);
+  const rightPaneWorksetsStorageKey = getRightPaneWorksetsStorageKey(officeWorkspaceKey);
+
   useEffect(() => {
     const nextRecent = readStoredCommandPaletteRecent(recentTargetsStorageKey, true);
     setCommandPaletteRecent((prev) => replaceStateIfChanged(prev, nextRecent));
@@ -4848,21 +4866,80 @@ export function App(): JSX.Element {
       if (isEditableElement(ev.target)) return;
       const index = Number(ev.key) - 1;
       if (!Number.isInteger(index) || index < 0 || index >= 3) return;
-      const item = visibleQuickAccessFavorites[index];
+      const item = commandPaletteFavorites[index];
       if (!item) return;
       ev.preventDefault();
-      item.run();
+      if (item.id === "autopilot") {
+        openPrimaryAutopilot();
+        return;
+      }
+      if (item.id === "dashboard") {
+        openPrimaryDashboard();
+        return;
+      }
+      if (item.id === "workspace") {
+        openPrimaryWorkspace();
+        return;
+      }
+      if (item.id === "office" || item.id === "control_room") {
+        openPrimaryOffice();
+        return;
+      }
+      if (item.id === "debate" || item.id.startsWith("debate_badge_")) {
+        openPrimaryDebate();
+        return;
+      }
+      if (item.id.startsWith("character_sheet_") || item.id.startsWith("agent_")) {
+        const agentId = String(item.id.replace(/^character_sheet_/, "").replace(/^agent_/, "") || "").trim();
+        if (agentId && orgAgents.some((agent) => String(agent.id || "").trim() === agentId)) {
+          openCharacterSheet(agentId);
+        }
+        return;
+      }
+      if (item.id.startsWith("thread_")) {
+        const threadKey = String(item.id.slice("thread_".length) || "").trim().toLowerCase();
+        if (isValidInboxThreadKey(threadKey)) {
+          openTrackerThread(threadKey);
+        }
+        return;
+      }
+      if (item.id.startsWith("tracker_")) {
+        const trackerId = String(item.id.slice("tracker_".length) || "").trim();
+        if (trackerId) {
+          openTrackerDetail(trackerId);
+        }
+        return;
+      }
+      if (item.id.startsWith("run_")) {
+        const runId = String(item.id.slice("run_".length) || "").trim();
+        if (runId) {
+          jumpToRun(runId);
+        }
+      }
     };
     window.addEventListener("keydown", handleQuickAccessFavoriteKeydown);
     return () => window.removeEventListener("keydown", handleQuickAccessFavoriteKeydown);
-  }, [activeChannel, quickAccessMode, visibleQuickAccessFavorites]);
+  }, [activeChannel, commandPaletteFavorites, orgAgents, quickAccessMode]);
 
   useEffect(() => {
+    const validTabs = rightPaneTabs.filter((tab) => {
+      if (tab.kind === "character_sheet") {
+        return orgAgents.some((agent) => String(agent.id || "").trim() === tab.targetId);
+      }
+      if (tab.kind === "tracker") {
+        return String(activeExecutionTracker?.id || "").trim() === tab.targetId;
+      }
+      if (tab.kind === "run") {
+        return !!String(tab.targetId || "").trim();
+      }
+      return isValidInboxThreadKey(tab.targetId);
+    });
+    const activeTab = validTabs.find((tab) => tab.id === activeRightPaneTabId) || null;
     const handleRightPaneTabKeydown = (ev: KeyboardEvent): void => {
       if (!ev.altKey || !ev.shiftKey || ev.ctrlKey || ev.metaKey) return;
       if (isEditableElement(ev.target)) return;
       if (commandPaletteOpen) return;
-      if (!validRightPaneTabs.length && ev.key.toLowerCase() !== "t") return;
+      if (!validTabs.length && ev.key.toLowerCase() !== "t") return;
       if (ev.key === "ArrowRight") {
         ev.preventDefault();
         cycleRightPaneTab(1);
@@ -4874,9 +4951,9 @@ export function App(): JSX.Element {
         return;
       }
       if (ev.key.toLowerCase() === "w") {
-        if (!activeRightPaneTab) return;
+        if (!activeTab) return;
         ev.preventDefault();
-        closeRightPaneTab(activeRightPaneTab.id);
+        closeRightPaneTab(activeTab.id);
         return;
       }
       if (ev.key.toLowerCase() === "t") {
@@ -4886,7 +4963,7 @@ export function App(): JSX.Element {
     };
     window.addEventListener("keydown", handleRightPaneTabKeydown);
     return () => window.removeEventListener("keydown", handleRightPaneTabKeydown);
-  }, [activeRightPaneTab, commandPaletteOpen, validRightPaneTabs]);
+  }, [activeExecutionTracker?.id, activeRightPaneTabId, commandPaletteOpen, orgAgents, rightPaneTabs]);
 
   useEffect(() => {
     const defaultIds = defaultOrderedAgents.map((agent) => agent.id);
@@ -5353,13 +5430,6 @@ export function App(): JSX.Element {
     if (cursor < text.length) parts.push(<span key="tail">{text.slice(cursor)}</span>);
     return <span className="msg-text">{parts.length ? parts : text}</span>;
   }
-
-  const officeWorkspaceKey = resolveOfficeWorkspaceKey();
-  const officeLayoutStorageKey = getOfficeLayoutStorageKey(officeWorkspaceKey);
-  const recentTargetsStorageKey = getRecentTargetsStorageKey(officeWorkspaceKey);
-  const favoriteTargetsStorageKey = getFavoriteTargetsStorageKey(officeWorkspaceKey);
-  const rightPaneWorksetsStorageKey = getRightPaneWorksetsStorageKey(officeWorkspaceKey);
-
   const filteredRuns = runs.filter((r) => r.run_id.includes(runFilter));
   const pinnedMessages = messages.filter((m) => pins.includes(m.id));
   const selectedAgent = orgAgents.find((x) => x.id === selectedAgentId) || null;
@@ -6206,7 +6276,13 @@ export function App(): JSX.Element {
     .map((id) => defaultOrderedAgents.find((agent) => agent.id === id))
     .filter((agent): agent is OrgAgent => !!agent);
   const orderedGuests = [...orgGuests].sort((a, b) => (String(a.id) < String(b.id) ? -1 : 1));
-  const officeConnectionMode = dashboardSseConnected ? "LIVE" : (dashboardHeartbeatStatus === "err" ? "DISCONNECTED" : "POLL");
+  const officeConnectionMode = dashboardSseConnected
+    ? "LIVE"
+    : ((dailyLoopDashboard
+      ? (dailyLoopDashboard.heartbeat.enabled_effective
+        ? statusClassFromBool(!!dailyLoopDashboard.heartbeat.enabled)
+        : "err")
+      : "warn") === "err" ? "DISCONNECTED" : "POLL");
   const officeRunStatus = String(councilStatus?.run?.status || "-");
   const officeRunId = String(councilStatus?.run?.run_id || councilRunId || "").trim();
   const officeQueueLabel = String(taskifyTrackingItem?.status || "-");
@@ -7065,7 +7141,7 @@ export function App(): JSX.Element {
                     className="trackerHistoryImportTextarea"
                     value={trackerHistoryImportText}
                     onChange={(e) => setTrackerHistoryImportText(e.target.value)}
-                    placeholder="{\"schema\":\"regionai.tracker_history.export.v1\",\"items\":[...]}"
+                    placeholder={'{"schema":"regionai.tracker_history.export.v1","items":[...]}'}
                   />
                   {trackerHistoryImportError ? <div className="empty dangerText wrapAnywhere">{trackerHistoryImportError}</div> : null}
                   {trackerHistoryImportReport ? <div className="empty wrapAnywhere">{trackerHistoryImportReport}</div> : null}
@@ -8085,7 +8161,7 @@ export function App(): JSX.Element {
                 {!heartbeatSuggestions.some((s) => s.status === "open") ? <div className="empty">No open suggestions</div> : null}
               </div>
               <div className="row-head"><strong>Night Consolidation</strong></div>
-              <div className="empty wrapAnywhere">episodes -> knowledge/procedures (deterministic, append-only)</div>
+              <div className="empty wrapAnywhere">{"episodes -> knowledge/procedures (deterministic, append-only)"}</div>
               <div className="list">
                 <label><input type="checkbox" checked={consolidationEnabled} onChange={(e) => setConsolidationEnabled(e.target.checked)} /> enabled</label>
                 <label>daily_time (HH:mm)<input value={consolidationDailyTime} onChange={(e) => setConsolidationDailyTime(e.target.value)} placeholder="23:30" /></label>
@@ -8114,7 +8190,7 @@ export function App(): JSX.Element {
                 failure_count={Number(consolidationState?.failure_count || 0)}
               </div>
               <div className="row-head"><strong>Routines: Morning Brief</strong></div>
-              <div className="empty wrapAnywhere">daily routine: heartbeat -> suggest -> autopilot -> brief artifact (safe)</div>
+              <div className="empty wrapAnywhere">{"daily routine: heartbeat -> suggest -> autopilot -> brief artifact (safe)"}</div>
               <div className="list">
                 <label><input type="checkbox" checked={morningBriefEnabled} onChange={(e) => setMorningBriefEnabled(e.target.checked)} /> enabled</label>
                 <label>daily_time (HH:mm)<input value={morningBriefDailyTime} onChange={(e) => setMorningBriefDailyTime(e.target.value)} placeholder="08:30" /></label>

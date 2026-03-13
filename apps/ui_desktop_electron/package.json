@@ -6,9 +6,73 @@
   "scripts": {
     "desktop:dev": "electron .",
     "desktop:smoke": "electron . --smoke",
-    "desktop:build": "node -e \"console.log('desktop_build_ok')\""
+    "desktop:build": "node -e \"console.log('desktop_build_ok')\"",
+    "desktop:dist:win:dir": "electron-builder --win dir"
+  },
+  "build": {
+    "appId": "ai.region.desktop",
+    "productName": "Region AI Desktop",
+    "asar": true,
+    "directories": {
+      "output": "../../artifacts/release/ui_desktop_electron"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "preload_region.cjs",
+      "shell.html",
+      "test_chat.html",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../docs/recipes_region_ai.json",
+        "to": "region_ai_bundle/repo/docs/recipes_region_ai.json"
+      },
+      {
+        "from": "../../docs/contract_index_region_ai.json",
+        "to": "region_ai_bundle/repo/docs/contract_index_region_ai.json"
+      },
+      {
+        "from": "../../docs/whiteboard_region_ai.md",
+        "to": "region_ai_bundle/repo/docs/whiteboard_region_ai.md"
+      },
+      {
+        "from": "../../docs/design",
+        "to": "region_ai_bundle/repo/docs/design"
+      },
+      {
+        "from": "../../templates/tasks/recipes",
+        "to": "region_ai_bundle/repo/templates/tasks/recipes"
+      },
+      {
+        "from": "../ui_discord/dist",
+        "to": "region_ai_bundle/repo/apps/ui_discord/dist"
+      },
+      {
+        "from": "../orchestrator/package.json",
+        "to": "region_ai_bundle/repo/apps/orchestrator/package.json"
+      },
+      {
+        "from": "../orchestrator/dist/ui_api.js",
+        "to": "region_ai_bundle/repo/apps/orchestrator/dist/ui_api.js"
+      },
+      {
+        "from": "../orchestrator/node_modules/yaml",
+        "to": "region_ai_bundle/repo/apps/orchestrator/node_modules/yaml"
+      }
+    ],
+    "win": {
+      "forceCodeSigning": false,
+      "signAndEditExecutable": false,
+      "target": [
+        "dir"
+      ],
+      "executableName": "Region AI Desktop"
+    }
   },
   "devDependencies": {
-    "electron": "^31.7.7"
+    "electron": "^31.7.7",
+    "electron-builder": "^26.0.12"
   }
 }

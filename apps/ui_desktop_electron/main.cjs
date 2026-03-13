@@ -1,4 +1,6 @@
 const fs = require("node:fs");
+const http = require("node:http");
+const net = require("node:net");
 const os = require("node:os");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
@@ -20,8 +22,11 @@ const {
 const TOP_BAR_HEIGHT = 52;
 const CHATGPT_ORIGIN = "https://chatgpt.com";
 const OPENAI_HOSTS = new Set(["chatgpt.com", "chat.openai.com", "openai.com"]);
-const DEFAULT_UI_URL = process.env.REGION_AI_UI_URL || "http://127.0.0.1:5173";
+const DEFAULT_DEV_UI_URL = "http://127.0.0.1:5173";
 const DEFAULT_UI_API_BASE = "http://127.0.0.1:8787";
+const PACKAGED_BUNDLE_DIRNAME = "region_ai_bundle";
+const PACKAGED_UI_API_READY_TIMEOUT_MS = 15000;
+const PACKAGED_UI_API_POLL_INTERVAL_MS = 250;
 const CAPTURE_MAX_CHARS = 8192;
 const CAPTURE_LAST_MAX_CHARS = 16 * 1024;
 const INBOX_TITLE_MAX_CHARS = 256;
@@ -41,6 +46,41 @@ const COUNCIL_POLL_INTERVAL_MS = 1500;
 const COUNCIL_WAIT_ASSISTANT_TIMEOUT_MS = 20000;
 const COUNCIL_WAIT_ASSISTANT_INTERVAL_MS = 700;
 const COUNCIL_MAX_REFLECTION_ATTEMPTS = 1;
+
+function normalizeRegionUiUrl(input) {
+  const value = String(input || "").trim();
+  if (!value) return "";
+  if (/^[A-Za-z]:[\\/]/.test(value) || value.startsWith("\\\\")) {
+    return pathToFileURL(path.resolve(value)).toString();
+  }
+  return value;
+}
+
+function resolvePackagedRepoRoot() {
+  const fromEnv = String(process.env.REGION_AI_REPO_ROOT || "").trim();
+  if (fromEnv) return path.resolve(fromEnv);
+  if (!app.isPackaged) return "";
+  const candidate = path.join(process.resourcesPath, PACKAGED_BUNDLE_DIRNAME, "repo");
+  return fs.existsSync(candidate) ? candidate : "";
+}
+
+function resolvePackagedUiUrl() {
+  const repoRoot = resolvePackagedRepoRoot();
+  if (!repoRoot) return "";
+  const uiIndexPath = path.join(repoRoot, "apps", "ui_discord", "dist", "index.html");
+  if (!fs.existsSync(uiIndexPath)) return "";
+  return pathToFileURL(uiIndexPath).toString();
+}
+
+function resolveRegionUiUrl() {
+  const fromEnv = normalizeRegionUiUrl(process.env.REGION_AI_UI_URL);
+  if (fromEnv) return fromEnv;
+  const packagedUiUrl = resolvePackagedUiUrl();
+  if (packagedUiUrl) return packagedUiUrl;
+  return DEFAULT_DEV_UI_URL;
+}
+
+const DEFAULT_UI_URL = resolveRegionUiUrl();
 const DEFAULT_HOTKEYS = Object.freeze({
   focus_chatgpt: "Ctrl+Alt+G",
   send_confirm: "Ctrl+Alt+S",
@@ -87,6 +127,7 @@ let notifyStateLoaded = false;
 let notifyStateSavedAtLeastOnce = false;
 let settingsHotReloadedAtLeastOnce = false;
 let lastNotificationPayload = null;
+let packagedUiApiStartupPromise = null;
 let runtimeConfig = {
   uiApiBase: String(process.env.REGION_AI_UI_API_BASE || DEFAULT_UI_API_BASE).trim() || DEFAULT_UI_API_BASE,
   notifyPollMs: Math.max(1000, Number(process.env.REGION_AI_NOTIFY_POLL_MS || DEFAULT_NOTIFY_POLL_MS)),
@@ -112,6 +153,13 @@ let notifyState = {
   backoff_ms: DEFAULT_NOTIFY_POLL_MS,
   inbox_last_written_ts: "",
 };
+
+if (app.isPackaged) {
+  const singleInstanceLockAcquired = app.requestSingleInstanceLock();
+  if (!singleInstanceLockAcquired) {
+    app.quit();
+  }
+}
 
 function resolveWorkspaceRoot() {
   const fromEnv = String(process.env.REGION_AI_WORKSPACE || "").trim();
@@ -174,6 +222,121 @@ function writeJsonAtomic(filePath, data) {
   const tmpPath = `${filePath}.tmp`;
   fs.writeFileSync(tmpPath, JSON.stringify(data, null, 2) + "\n", "utf8");
   fs.renameSync(tmpPath, filePath);
+}
+
+function waitMs(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function parseUiApiBase(value) {
+  try {
+    const url = new URL(String(value || DEFAULT_UI_API_BASE));
+    const port = Number(url.port || (url.protocol === "https:" ? 443 : 80));
+    return {
+      ok: (url.protocol === "http:" || url.protocol === "https:") && Number.isFinite(port) && port > 0,
+      host: url.hostname,
+      port,
+      isLocal: url.hostname === "127.0.0.1" || url.hostname === "localhost",
+      healthUrl: `${url.origin}/api/ssot/recipes`,
+    };
+  } catch {
+    return { ok: false, host: "", port: 0, isLocal: false, healthUrl: "" };
+  }
+}
+
+function probeHttpOk(urlText, timeoutMs = 1000) {
+  return new Promise((resolve) => {
+    let settled = false;
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      resolve(value);
+    }
+    try {
+      const req = http.get(urlText, { timeout: timeoutMs }, (res) => {
+        const statusCode = Number(res.statusCode || 0);
+        res.resume();
+        res.on("end", () => finish(statusCode === 200));
+      });
+      req.on("timeout", () => {
+        req.destroy();
+        finish(false);
+      });
+      req.on("error", () => finish(false));
+    } catch {
+      finish(false);
+    }
+  });
+}
+
+function isLocalPortOpen(host, port, timeoutMs = 500) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = net.connect({ host, port });
+    function finish(value) {
+      if (settled) return;
+      settled = true;
+      try { socket.destroy(); } catch {}
+      resolve(value);
+    }
+    socket.setTimeout(timeoutMs);
+    socket.once("connect", () => finish(true));
+    socket.once("timeout", () => finish(false));
+    socket.once("error", () => finish(false));
+  });
+}
+
+async function waitForUiApiReady(timeoutMs = PACKAGED_UI_API_READY_TIMEOUT_MS) {
+  const target = parseUiApiBase(runtimeConfig.uiApiBase);
+  if (!target.ok || !target.healthUrl) return false;
+  const deadline = Date.now() + Math.max(1000, timeoutMs);
+  while (Date.now() < deadline) {
+    if (await probeHttpOk(target.healthUrl, 1000)) return true;
+    await waitMs(PACKAGED_UI_API_POLL_INTERVAL_MS);
+  }
+  return false;
+}
+
+async function ensurePackagedUiApiReady() {
+  if (!app.isPackaged) {
+    return { ok: true, skipped: true, reason: "not_packaged" };
+  }
+  if (String(process.env.REGION_AI_DESKTOP_AUTOSTART_UI_API || "1").trim() === "0") {
+    return { ok: true, skipped: true, reason: "autostart_disabled" };
+  }
+  if (packagedUiApiStartupPromise) return packagedUiApiStartupPromise;
+  packagedUiApiStartupPromise = (async () => {
+    if (await waitForUiApiReady(1500)) {
+      return { ok: true, already_running: true };
+    }
+    const target = parseUiApiBase(runtimeConfig.uiApiBase);
+    if (!target.ok || !target.isLocal) {
+      return { ok: false, reason: "ui_api_base_not_local" };
+    }
+    if (await isLocalPortOpen(target.host, target.port, 500)) {
+      const ready = await waitForUiApiReady(3000);
+      if (ready) return { ok: true, already_running: true };
+      return { ok: false, reason: `ui_api_port_busy:${target.host}:${target.port}` };
+    }
+    const repoRoot = resolvePackagedRepoRoot();
+    if (!repoRoot) return { ok: false, reason: "packaged_repo_missing" };
+    const apiModulePath = path.join(repoRoot, "apps", "orchestrator", "dist", "ui_api.js");
+    if (!fs.existsSync(apiModulePath)) return { ok: false, reason: "packaged_ui_api_missing" };
+    const previousCwd = process.cwd();
+    try {
+      process.chdir(path.join(repoRoot, "apps", "orchestrator"));
+      await import(pathToFileURL(apiModulePath).href);
+    } finally {
+      try { process.chdir(previousCwd); } catch {}
+    }
+    const ready = await waitForUiApiReady();
+    if (!ready) return { ok: false, reason: "packaged_ui_api_not_ready" };
+    return { ok: true, started: true };
+  })().catch((error) => ({
+    ok: false,
+    reason: String(error && error.message ? error.message : error),
+  }));
+  return packagedUiApiStartupPromise;
 }
 
 function clipText(input, maxLen) {
@@ -2392,7 +2555,18 @@ ipcMain.handle("bridge:capture_last_assistant", async () => {
   return captureLastAssistantFromChat();
 });
 
-app.whenReady().then(() => {
+app.on("second-instance", () => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+
+app.whenReady().then(async () => {
+  const packagedUiApi = await ensurePackagedUiApiReady();
+  if (!packagedUiApi.ok && !packagedUiApi.skipped) {
+    console.log(`[desktop_packaged] ui_api_start_failed reason=${String(packagedUiApi.reason || "unknown")}`);
+  }
   const persistedState = initializeDesktopPersistence();
   createMainWindow();
   const shellInit = initDesktopShellServices();

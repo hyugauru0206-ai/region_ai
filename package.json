@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "region-ai-root",
   "private": true,
   "version": "0.0.0",
@@ -10,6 +10,7 @@
     "ci:smoke:gate:json": "node tools/ci_smoke_gate_runner.cjs",
     "ui:build:smoke:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\ui_build_smoke.ps1 -Json",
     "desktop:smoke:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_smoke.ps1 -Json",
+    "desktop:dist:win": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dist_win.ps1",
     "desktop:dev:all": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Start",
     "desktop:dev:stop": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Stop",
     "desktop:dev:status:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -File tools\\desktop_dev_all.ps1 -Status -Json",
@@ -22,4 +23,3 @@
     "publish:from-bundle:json": "C:\\WINDOWS\\System32\\WindowsPowerShell\\v1.0\\powershell.exe -NoProfile -ExecutionPolicy Bypass -Command \"& .\\tools\\publish_from_bundle.ps1 -RepoUrl $env:REGION_AI_REPO_URL -BundlePath $env:REGION_AI_BUNDLE_PATH -DryRun\""
   }
 }
-
